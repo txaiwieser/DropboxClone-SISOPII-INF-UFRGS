@@ -1,5 +1,5 @@
 #define MAXNAME 50 // TODO quanto?
-#define MAXSIZE
+#define MAXFILE 500 // TODO quanto?
 
 struct client {
   int devices[2]; // associado aos dispositivos do usuário
