@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+
+// TODO criar makefile, .gitignore
 // usage : ./dropboxClient fulano endereço porta
 
 // METHODS:
