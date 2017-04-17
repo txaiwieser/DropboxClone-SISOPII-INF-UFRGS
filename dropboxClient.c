@@ -42,6 +42,7 @@ void cmdMan(){
 };
 
 int main(){
+  // TODO get argc and argv
     char cmd[256];
     char *token;
 
