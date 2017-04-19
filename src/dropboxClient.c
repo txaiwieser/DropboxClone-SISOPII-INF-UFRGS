@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include "../include/dropboxClient.h"
 
 /* Para ativar as mensagens de debug, defina como 1 o valor da constante abaixo */
 #define DEBUG 1
