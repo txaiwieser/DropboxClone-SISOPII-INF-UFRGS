@@ -66,10 +66,10 @@ int main(int argc, char * argv[]) {
         printf("Request method: GET_SYNC_DIR\n");
     } else if (!strncmp(buffer, "DOWNLOAD", 8)) {
         printf("Request method: DOWNLOAD\n");
-        printf("Filename: %s\n", buffer + 8);
+        printf("Filename: %s\n", buffer + 9);
     } else if (!strncmp(buffer, "UPLOAD", 6)) {
         printf("Request method: UPLOAD\n");
-				printf("Filename: %s\n", buffer + 6);
+				printf("Filename: %s\n", buffer + 7);
     };
 
     printf("BUFFER: %s\n", buffer);

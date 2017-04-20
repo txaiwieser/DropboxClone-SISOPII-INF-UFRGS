@@ -8,22 +8,50 @@
 
 char server_host[50]; // TODO max host name length?
 int server_port = 0, sock = 0;
+char *server_user[50]; // TODO what's the max username?
 
-void cmdUpload() {
-    printf("-> UPLOAD\n");
+void cmdUpload(char *filename) {
+    // TODO verificar se foi passado um nome de arquivo válido (nao vazio?)
+    // TODO fazer funcionar se houver espaços a mais antes do filename (e pode ser que haja depois também...)
+    int valread;
+    char buffer[1024] = {0};
+
+    // Concatenate strings to get method = "DOWNLOAD filename"
+    char * method =  malloc(7+strlen(filename)+1);
+    strcpy(method,"UPLOAD ");
+    strcat(method, filename);
+
+    send(sock, method, strlen(method), 0);
+    debug_printf("[%s method sent]\n", method);
+    valread = read(sock, buffer, 1024);
+
+    //printf("Uploading file %s\n", filename) // TODO show progress?
+    // TODO upload file using get_file()
 };
 
-void cmdDownload() {
-    //char *download_test_method = "DOWNLOAD filename.ext\0"; // TODO fazer funcionar sem esse \0 ou inclui-lo na hora de enviar pro servidor?
-    printf("-> DOWNLOAD\n");
+void cmdDownload(char *filename) {
+    // TODO verificar se foi passado um nome de arquivo válido (nao vazio?)
+    // TODO fazer funcionar se houver espaços a mais antes do filename (e pode ser que haja depois também...)
+    int valread;
+    char buffer[1024] = {0};
+
+    // Concatenate strings to get method = "DOWNLOAD filename"
+    char * method =  malloc(9+strlen(filename)+1);
+    strcpy(method,"DOWNLOAD ");
+    strcat(method, filename);
+
+    send(sock, method, strlen(method), 0);
+    debug_printf("[%s method sent]\n", method);
+    valread = read(sock, buffer, 1024);
+
+    //printf("Downloading file %s\n", filename) // TODO show progress?
+    // TODO download file using send_file()
 };
 
 void cmdList() {
     char * method = "LIST";
     int valread;
-    char buffer[1024] = {
-        0
-    };
+    char buffer[1024] = {0};
 
     send(sock, method, strlen(method), 0);
     debug_printf("[%s method sent]\n", method);
@@ -49,6 +77,7 @@ void cmdExit(){
 
 int main(int argc, char * argv[]) {
     char cmd[256];
+    char filename[256];
     char * token;
 
     if (argc < 4) { // Número incorreto de parametros
@@ -74,8 +103,13 @@ int main(int argc, char * argv[]) {
         if ((token = strtok(cmd, " \t")) != NULL) {
             if (strcmp(token, "exit") == 0) {
                 break;
-            } else if (strcmp(token, "upload") == 0) cmdUpload();
-            else if (strcmp(token, "download") == 0) cmdDownload();
+            } else if (strcmp(token, "upload") == 0) {
+              strcpy(filename, cmd+7);
+              cmdUpload(filename);
+            } else if (strcmp(token, "download") == 0) {
+                strcpy(filename, cmd+9);
+                cmdDownload(filename);
+            }
             else if (strcmp(token, "list") == 0) cmdList();
             else if (strcmp(token, "get_sync_dir") == 0) cmdGetSyncDir();
             else if (strcmp(token, "help") == 0) cmdMan();
