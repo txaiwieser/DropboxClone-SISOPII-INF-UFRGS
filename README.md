@@ -1,6 +1,6 @@
-## Execução
+## Utilização
 1. Compile ```make```
-2. Inicie o servidor: ```./dropboxServer usuario 127.0.0.1 3003```
+2. Inicie o servidor: ```./dropboxServer 3003```
 3. Inicie o cliente: ```./dropboxClient usuario 127.0.0.1 3003```
 
 ## TODO
