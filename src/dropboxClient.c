@@ -7,7 +7,7 @@
 #include "../include/dropboxClient.h"
 
 char server_host[50]; // TODO max host name length?
-int server_port = 0;
+int server_port = 0, sock = 0;
 
 void cmdUpload() {
     printf("-> UPLOAD\n");
@@ -25,15 +25,10 @@ void cmdList() {
         0
     };
 
-    int sock = connect_server(server_host, server_port);
-    debug_printf("[Socket number %d]\n", sock);
-    // TODO verificar valor do sock se é > 0?
-
     send(sock, method, strlen(method), 0);
     debug_printf("[%s method sent]\n", method);
     valread = read(sock, buffer, 1024);
     printf("Files: \n%s\n", buffer);
-    close_connection(sock);
 };
 
 void cmdGetSyncDir() {};
@@ -48,6 +43,10 @@ void cmdMan() {
     printf("exit\n\n");
 };
 
+void cmdExit(){
+  close_connection();
+}
+
 int main(int argc, char * argv[]) {
     char cmd[256];
     char * token;
@@ -59,6 +58,12 @@ int main(int argc, char * argv[]) {
     debug_printf("[Client started with parameters User=%s IP=%s Port=%s]\n", argv[1], argv[2], argv[3]);
     strcpy(server_host, argv[2]);
     server_port = atoi(argv[3]);
+
+    sock = connect_server(server_host, server_port);
+    if (sock < 0) {
+        return -1;
+    }
+    debug_printf("[Connection established. Socket number %d]\n", sock);
 
     printf("Welcome to Dropbox! - v 1.0\n");
     cmdMan();
@@ -103,7 +108,7 @@ int connect_server(char * host, int port) {
     }
 
     if (connect(sock, (struct sockaddr * ) & serv_addr, sizeof(serv_addr)) < 0) {
-        printf("\nConnection Failed \n");
+        printf("\nConnection Failed. \n");
         return -1;
     }
 
@@ -122,8 +127,6 @@ void get_file(char * file) {
 
 }
 
-void close_connection(int sock) {
+void close_connection() {
   shutdown(sock, 2); // Stop both reception and transmission.
-
-  // TODO esse parametro pode ser utilizado? na especificação do trabalho, em "resumo da interface de implementação minima para o cliente" essa funcao aparece sem nenhum parametro. mas como está dito "minima" e me parece necessário passar pelo menos o identificador do socket pra poder encerrar a conexão, adicionei como parametro
 }
