@@ -3,12 +3,15 @@
 #include <sys/socket.h>
 #include <stdlib.h>
 #include <netinet/in.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxClient.h"
 
-char server_host[50]; // TODO max host name length?
+char server_host[50]; // TODO max host name length? or use malloc!
 int server_port = 0, sock = 0;
-char *server_user[50]; // TODO what's the max username?
+char *server_user[50]; // TODO what's the max username? or use malloc!
 
 void cmdUpload(char *filename) {
     // TODO verificar se foi passado um nome de arquivo válido (nao vazio?)
@@ -26,7 +29,7 @@ void cmdUpload(char *filename) {
     valread = read(sock, buffer, 1024);
 
     //printf("Uploading file %s\n", filename) // TODO show progress?
-    // TODO upload file using get_file()
+    // TODO upload file using send_file()
 };
 
 void cmdDownload(char *filename) {
@@ -45,7 +48,7 @@ void cmdDownload(char *filename) {
     valread = read(sock, buffer, 1024);
 
     //printf("Downloading file %s\n", filename) // TODO show progress?
-    // TODO download file using send_file()
+    // TODO download file using get_file()
 };
 
 void cmdList() {
@@ -59,7 +62,21 @@ void cmdList() {
     printf("Files: \n%s\n", buffer);
 };
 
-void cmdGetSyncDir() {};
+void cmdGetSyncDir() {
+    struct stat st = {0};
+    char *folder = malloc(strlen(getenv("HOME"))+10+strlen(server_user)+1);
+    strcpy(folder,getenv("HOME"));
+    strcat(folder,"/sync_dir_");
+    strcat(folder, server_user);
+
+    // Create folder if it doesn't exist
+    if (stat(folder, &st) == -1) {
+        mkdir(folder, 0700);
+        printf("Created folder %s\n", folder);
+    } else {
+        printf("Folder already exists\n");
+    }
+};
 
 void cmdMan() {
     printf("\nAvailable commands:\n");
@@ -86,6 +103,7 @@ int main(int argc, char * argv[]) {
     }
     debug_printf("[Client started with parameters User=%s IP=%s Port=%s]\n", argv[1], argv[2], argv[3]);
     strcpy(server_host, argv[2]);
+    strcpy(server_user, argv[1]);
     server_port = atoi(argv[3]);
 
     sock = connect_server(server_host, server_port);

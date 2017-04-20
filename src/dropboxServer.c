@@ -62,8 +62,6 @@ int main(int argc, char * argv[]) {
 				char * list_of_files = "filename1.ext\nfilename2.ext\nfilename3.ext\n";
 				send(new_socket, list_of_files, strlen(list_of_files), 0);
 				printf("List of files sent\n");
-    } else if (!strncmp(buffer, "GET_SYNC_DIR", 12)) {
-        printf("Request method: GET_SYNC_DIR\n");
     } else if (!strncmp(buffer, "DOWNLOAD", 8)) {
         printf("Request method: DOWNLOAD\n");
         printf("Filename: %s\n", buffer + 9);
@@ -71,6 +69,7 @@ int main(int argc, char * argv[]) {
         printf("Request method: UPLOAD\n");
 				printf("Filename: %s\n", buffer + 7);
     };
+		// TODO o que fazer se for algum método invalido?
 
     printf("BUFFER: %s\n", buffer);
 
