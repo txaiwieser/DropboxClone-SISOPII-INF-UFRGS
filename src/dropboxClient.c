@@ -44,8 +44,8 @@ void cmdMan() {
     printf("list\n");
     printf("download <filename.ext>\n");
     printf("upload <path/filename.ext>\n");
-    printf("help\n\n");
-    printf("exit\n");
+    printf("help\n");
+    printf("exit\n\n");
 };
 
 int main(int argc, char * argv[]) {
