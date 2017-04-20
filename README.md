@@ -1,8 +1,5 @@
-## Compilar
-```gcc dropboxClient.c -o dropboxClient```
-
-## Executar
-```./dropboxClient augusto 127.0.0.1 80```
+## Execução
+```./dropboxClient usuario 127.0.0.1 porta```
 
 ## TODO
 -  [] Makefile - Incluir coisas do dropboxUtil
@@ -12,4 +9,4 @@
 -  [] list
 -  [] upload/download
 -  [] outras coisas
--  [] .gitignore
+-  [x] .gitignore
