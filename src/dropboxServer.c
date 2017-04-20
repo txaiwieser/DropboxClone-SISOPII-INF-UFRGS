@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include "../include/dropboxUtil.h"
 #include "../include/dropboxServer.h"
 
 int main(){

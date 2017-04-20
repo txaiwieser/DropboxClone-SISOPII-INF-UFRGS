@@ -1,30 +1,17 @@
 #include <stdio.h>
 #include <string.h>
-#include <stdarg.h>
-#include <stdlib.h>
+#include "../include/dropboxUtil.h"
 #include "../include/dropboxClient.h"
 
-/* Para ativar as mensagens de debug, defina como 1 o valor da constante abaixo */
-#define DEBUG 1
+/* TODO setar valor de DEBUG aqui? */
 
-/* Mensagens de debug */
-void debug_printf(const char* message, ...) {
-    if(DEBUG) {
-        va_list args;
-        va_start(args, message);
-        vprintf(message, args);
-        va_end(args);
-    }
-}
-
-// usage : ./dropboxClient fulano endereço porta
-
-// METHODS:
-// upload <path/filename.ext>
-// download <filename.ext>
-// list
-// get_sync_dir
-// exit
+/* METHODS:
+ upload <path/filename.ext>
+ download <filename.ext>
+ list
+ get_sync_dir
+ exit
+*/
 
 void cmdUpload(){
   printf("-> UPLOAD\n");
@@ -58,10 +45,10 @@ void cmdMan(){
 
 int main(int argc, char *argv[]){
   if (argc < 4) { // Número incorreto de parametros
-          printf("Usage: %s fulano endereço porta\n", argv[0]);
+          printf("Usage: %s <user> <IP> <port>\n", argv[0]);
           return 1;
   }
-  debug_printf("~~ BEGIN ~~\nUsuario: %s\nEndereco: %s\nPorta: %s\n", argv[1], argv[2], argv[3]);
+  debug_printf("~~ BEGIN ~~\nUser: %s\nIP: %s\nPort: %s\n", argv[1], argv[2], argv[3]);
 
     char cmd[256];
     char *token;

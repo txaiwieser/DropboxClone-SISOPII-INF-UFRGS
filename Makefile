@@ -5,16 +5,16 @@ BIN_DIR=./bin
 SRC_DIR=./src
 
 
-all: util client server
+all: dropboxUtil.o client server
 
-util: 
-	gcc -c $(SRC_DIR)/dropboxUtil.c -Wall -o $(BIN_DIR)/dropboxUtil.o
-	
-client:
-	gcc $(SRC_DIR)/dropboxClient.c -o $(BIN_DIR)/dropboxClient
+dropboxUtil.o:
+	$(CC) -c $(SRC_DIR)/dropboxUtil.c -Wall -o $(BIN_DIR)/dropboxUtil.o
 
-server:
-	gcc $(SRC_DIR)/dropboxServer.c -o $(BIN_DIR)/dropboxServer
+client: dropboxUtil.o
+	$(CC) -o $(BIN_DIR)/dropboxClient $(SRC_DIR)/dropboxClient.c $(BIN_DIR)/dropboxUtil.o -Wall
+
+server: dropboxUtil.o
+	$(CC) -o $(BIN_DIR)/dropboxServer $(SRC_DIR)/dropboxServer.c $(BIN_DIR)/dropboxUtil.o -Wall
 
 clean:
 	rm -rf $(LIB_DIR)/*.a $(BIN_DIR)/*.o $(SRC_DIR)/*~ $(INC_DIR)/*~ *~
