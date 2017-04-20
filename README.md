@@ -1,5 +1,5 @@
 ## Execução
-```./dropboxClient usuario 127.0.0.1 porta```
+exemplo: ```./dropboxClient usuario 127.0.0.1 3003```
 
 ## TODO
 -  [x] Makefile - Incluir coisas do dropboxUtil
