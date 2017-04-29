@@ -60,6 +60,8 @@ void cmdList() {
     debug_printf("[%s method sent]\n", method);
     valread = read(sock, buffer, 1024);
     printf("Files: \n%s\n", buffer);
+
+    // TODO suportar uma lista "infinita" de arquivos
 };
 
 void cmdGetSyncDir() {

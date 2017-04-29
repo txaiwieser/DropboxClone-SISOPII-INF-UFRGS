@@ -13,3 +13,4 @@
 - [ ] download
 - [ ] outras coisas
 - [x] .gitignore
+- [ ] Segurança: e se o usuário passar um filename com "../" vai baixar algum arquivo indevido?
