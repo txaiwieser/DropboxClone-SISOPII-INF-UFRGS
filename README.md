@@ -8,7 +8,7 @@
 - [x] Integrar exemplos socket
 - [x] Ver como acoes vao ser passadas para o servidor e vice-versa
 - [x] get_sync_dir
-- [ ] list
+- [x] list
 - [ ] upload
 - [ ] download
 - [ ] outras coisas

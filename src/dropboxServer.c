@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <netinet/in.h>
 #include <string.h>
+#include <sys/types.h>
+#include <dirent.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxServer.h"
 
@@ -58,9 +60,34 @@ int main(int argc, char * argv[]) {
     valread = read(new_socket, buffer, 1024);
 
     if (!strncmp(buffer, "LIST", 4)) {
+        // TODO Passar tudo isso pra uma função
+
         printf("Request method: LIST\n");
 				char * list_of_files = "filename1.ext\nfilename2.ext\nfilename3.ext\n";
 				send(new_socket, list_of_files, strlen(list_of_files), 0);
+
+        // TODO check if folder exists
+        DIR *dp;
+        struct dirent *ep;
+
+        char server_user[] = "augusto";
+        char *folder = malloc(strlen(getenv("HOME"))+17+strlen(server_user)+1);
+        strcpy(folder,getenv("HOME"));
+        strcat(folder,"/server_sync_dir_");
+        strcat(folder, server_user);
+
+        // TODO ordenar arquivos pelo nome
+
+        dp = opendir (folder);
+        if (dp != NULL) {
+            while (ep = readdir (dp)) {
+                puts (ep->d_name);
+            }
+            (void) closedir (dp);
+        } else {
+            perror ("Couldn't open the directory");
+        }
+
 				printf("List of files sent\n");
     } else if (!strncmp(buffer, "DOWNLOAD", 8)) {
         printf("Request method: DOWNLOAD\n");
@@ -71,13 +98,13 @@ int main(int argc, char * argv[]) {
     };
 		// TODO o que fazer se for algum método invalido?
 
-    printf("BUFFER: %s\n", buffer);
+    //printf("BUFFER: %s\n", buffer);
 
     return 0;
 }
 
 void sync_server() {
-
+    // TODO create user folder on server?
 }
 
 void receive_file(char * file) {
