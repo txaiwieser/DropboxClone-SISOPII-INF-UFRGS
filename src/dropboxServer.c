@@ -81,7 +81,8 @@ int main(int argc, char * argv[]) {
         dp = opendir (folder);
         if (dp != NULL) {
             while (ep = readdir (dp)) {
-                puts (ep->d_name);
+                send(new_socket, ep->d_name, strlen(ep->d_name), 0);
+                //puts (ep->d_name);
             }
             (void) closedir (dp);
         } else {

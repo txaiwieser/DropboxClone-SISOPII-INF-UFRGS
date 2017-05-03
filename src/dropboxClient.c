@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <netdb.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxClient.h"
 
@@ -144,6 +145,13 @@ int connect_server(char * host, int port) {
     struct sockaddr_in address;
     int sock = 0;
     struct sockaddr_in serv_addr;
+    struct hostent *server;
+
+    server = gethostbyname(host);
+    if (server == NULL) {
+        printf("ERROR, no such host\n");
+        return -1;
+    }
 
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         printf("\n Socket creation error \n");
@@ -154,12 +162,8 @@ int connect_server(char * host, int port) {
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
-
-    // Convert IPv4 and IPv6 addresses from text to binary form
-    if (inet_pton(AF_INET, "127.0.0.1", & serv_addr.sin_addr) <= 0) {
-        printf("\nInvalid address/ Address not supported \n");
-        return -1;
-    }
+    serv_addr.sin_addr = *((struct in_addr *)server->h_addr);
+    bzero(&(serv_addr.sin_zero), 8);
 
     if (connect(sock, (struct sockaddr * ) & serv_addr, sizeof(serv_addr)) < 0) {
         printf("\nConnection Failed. \n");
@@ -182,5 +186,6 @@ void get_file(char * file) {
 }
 
 void close_connection() {
-  shutdown(sock, 2); // Stop both reception and transmission.
+    // Stop both reception and transmission.
+    shutdown(sock, 2);
 }
