@@ -63,8 +63,8 @@ int main(int argc, char * argv[]) {
         // TODO Passar tudo isso pra uma função
 
         printf("Request method: LIST\n");
-				char * list_of_files = "filename1.ext\nfilename2.ext\nfilename3.ext\n";
-				send(new_socket, list_of_files, strlen(list_of_files), 0);
+	    //char * list_of_files = "filename1.ext\nfilename2.ext\nfilename3.ext\n";
+        //send(new_socket, list_of_files, strlen(list_of_files), 0);
 
         // TODO check if folder exists
         DIR *dp;
@@ -89,7 +89,7 @@ int main(int argc, char * argv[]) {
             perror ("Couldn't open the directory");
         }
 
-				printf("List of files sent\n");
+		printf("List of files sent\n");
     } else if (!strncmp(buffer, "DOWNLOAD", 8)) {
         printf("Request method: DOWNLOAD\n");
         printf("Filename: %s\n", buffer + 9);
