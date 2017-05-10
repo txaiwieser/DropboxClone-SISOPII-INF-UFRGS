@@ -10,26 +10,26 @@
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxClient.h"
 
-char server_host[50]; // TODO max host name length? or use malloc!
+char server_host[256];
 int server_port = 0, sock = 0;
-char *server_user[50]; // TODO what's the max username? or use malloc!
+char server_user[50]; // TODO what's the max username? or use malloc!
 
 void cmdUpload(char *filename) {
     // TODO verificar se foi passado um nome de arquivo válido (nao vazio?)
     // TODO fazer funcionar se houver espaços a mais antes do filename (e pode ser que haja depois também...)
     int valread;
     char buffer[1024] = {0};
+    char method[160];
 
-    // Concatenate strings to get method = "DOWNLOAD filename"
-    char * method =  malloc(7+strlen(filename)+1);
-    strcpy(method,"UPLOAD ");
-    strcat(method, filename);
+    // Concatenate strings to get method = "UPLOAD filename"
+    sprintf(method, "UPLOAD %s", filename);
 
+    // Call to the server
     send(sock, method, strlen(method), 0);
     debug_printf("[%s method sent]\n", method);
     valread = read(sock, buffer, 1024);
 
-    //printf("Uploading file %s\n", filename) // TODO show progress?
+    //printf("Uploading file %s\n", filename)
     // TODO upload file using send_file()
 };
 
@@ -38,27 +38,25 @@ void cmdDownload(char *filename) {
     // TODO fazer funcionar se houver espaços a mais antes do filename (e pode ser que haja depois também...)
     int valread;
     char buffer[1024] = {0};
+    char method[160];
 
     // Concatenate strings to get method = "DOWNLOAD filename"
-    char * method =  malloc(9+strlen(filename)+1);
-    strcpy(method,"DOWNLOAD ");
-    strcat(method, filename);
+    sprintf(method, "DOWNLOAD %s", filename);
 
+    // Send to the server
     send(sock, method, strlen(method), 0);
     debug_printf("[%s method sent]\n", method);
     valread = read(sock, buffer, 1024);
 
-    //printf("Downloading file %s\n", filename) // TODO show progress?
+    //printf("Downloading file %s\n", filename)
     // TODO download file using get_file()
 };
 
 void cmdList() {
-    char * method = "LIST";
     int valread;
     char buffer[1024] = {0};
 
-    send(sock, method, strlen(method), 0);
-    debug_printf("[%s method sent]\n", method);
+    send(sock, "LIST", 4, 0);
     valread = read(sock, buffer, 1024);
     printf("Files: \n%s\n", buffer);
 
@@ -66,19 +64,13 @@ void cmdList() {
 };
 
 void cmdGetSyncDir() {
-    struct stat st = {0};
-    char *folder = malloc(strlen(getenv("HOME"))+10+strlen(server_user)+1);
-    strcpy(folder,getenv("HOME"));
-    strcat(folder,"/sync_dir_");
-    strcat(folder, server_user);
+    char user_sync_dir_path[256];
+
+    // Define path to user sync_dir folder
+    sprintf(user_sync_dir_path, "%s/sync_dir_%s", getenv("HOME"), server_user);
 
     // Create folder if it doesn't exist
-    if (stat(folder, &st) == -1) {
-        mkdir(folder, 0700);
-        printf("Created folder %s\n", folder);
-    } else {
-        printf("Folder already exists\n");
-    }
+    makedir_if_not_exists(user_sync_dir_path);
 };
 
 void cmdMan() {

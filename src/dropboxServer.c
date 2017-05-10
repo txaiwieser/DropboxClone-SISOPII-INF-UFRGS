@@ -6,7 +6,6 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <pthread.h>
-#include <sys/stat.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxServer.h"
 
@@ -74,7 +73,7 @@ int main(int argc, char * argv[]) {
 }
 
 void sync_server() {
-    // TODO create user folder on server?
+
 }
 
 void receive_file(char * file) {
@@ -98,23 +97,22 @@ void *connection_handler(void *socket_desc) {
 		client_message[read_size] = '\0';
 
         if (!strncmp(client_message, "LIST", 4)) {
-            printf("Request method: LIST\n");
-
             DIR *dp;
             struct dirent *ep;
-            struct stat st = {0};
-            char folder[256];
-            char server_user[] = "usuario"; // TODO get user from where?
+            char user_sync_dir_path[256];
+            char username[] = "usuario"; // TODO get user from where?
 
-            // Define path to user folder on server.
-            sprintf(folder, "%s/server_sync_dir_%s", getenv("HOME"), server_user);
+            printf("<~ %s requested LIST\n", username);
+
+            // Define path to user folder on server
+            sprintf(user_sync_dir_path, "%s/server_sync_dir_%s", getenv("HOME"), username);
 
             // Create folder if it doesn't exist
-            if (stat(folder, &st) == -1) {
-                mkdir(folder, 0700);
-            }
+            // TODO it should be done at the first time a user connects to the server, not here.
+            makedir_if_not_exists(user_sync_dir_path);
 
-            dp = opendir (folder);
+            // List files
+            dp = opendir (user_sync_dir_path);
             if (dp != NULL) {
                 while ((ep = readdir (dp))) {
                     // TODO ordenar arquivos pelo nome
@@ -127,7 +125,8 @@ void *connection_handler(void *socket_desc) {
                 perror ("Couldn't open the directory");
             }
 
-    		printf("List of files sent\n");
+    		printf("~> List of files sent to %s\n", username);
+
         } else if (!strncmp(client_message, "DOWNLOAD", 8)) {
             printf("Request method: DOWNLOAD\n");
             printf("Filename: %s\n", client_message + 9);
