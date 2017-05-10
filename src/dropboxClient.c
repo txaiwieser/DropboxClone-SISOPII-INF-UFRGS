@@ -58,7 +58,7 @@ void cmdList() {
 
     send(sock, "LIST", 4, 0);
     valread = read(sock, buffer, 1024);
-    printf("Files: \n%s\n", buffer);
+    printf("%s", buffer);
 
     // TODO suportar uma lista "infinita" de arquivos
 };

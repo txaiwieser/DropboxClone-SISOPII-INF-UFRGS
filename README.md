@@ -8,7 +8,7 @@
 - [x] Integrar exemplos socket
 - [x] Ver como acoes vao ser passadas para o servidor e vice-versa
 - [x] get_sync_dir
-- [x] list
+- [ ] list: funcionando, mas não para um conjunto muito grande de arquivos. como fazer ele encerrar apenas após ter baixado todos? (nem antes e nem muito tempo depois)
 - [ ] upload
 - [ ] download
 - [ ] outras coisas
