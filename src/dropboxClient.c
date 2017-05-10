@@ -142,7 +142,6 @@ int main(int argc, char * argv[]) {
 }
 
 int connect_server(char * host, int port) {
-    struct sockaddr_in address;
     int sock = 0;
     struct sockaddr_in serv_addr;
     struct hostent *server;

@@ -5,27 +5,23 @@
 #include <string.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <pthread.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxServer.h"
 
 int main(int argc, char * argv[]) {
-    char cmd[256];
-    char * token;
-		int port;
-
     if (argc != 2) { // Número incorreto de parametros
         printf("Usage: %s <port>\n", argv[0]);
         return 1;
     }
 
-		port = atoi(argv[1]);
+	int port = atoi(argv[1]);
     printf("Server started on port %d\n", port);
 
-    int server_fd, new_socket, valread;
+    int server_fd, new_socket;
     struct sockaddr_in address;
     int opt = 1;
     int addrlen = sizeof(address);
-    char buffer[1024] = {0};
 
     // Creating socket file descriptor
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
@@ -52,54 +48,26 @@ int main(int argc, char * argv[]) {
         perror("listen");
         exit(EXIT_FAILURE);
     }
-    if ((new_socket = accept(server_fd, (struct sockaddr * ) & address,
-            (socklen_t * ) & addrlen)) < 0) {
-        perror("accept");
-        exit(EXIT_FAILURE);
-    }
-    valread = read(new_socket, buffer, 1024);
 
-    if (!strncmp(buffer, "LIST", 4)) {
-        // TODO Passar tudo isso pra uma função
-
-        printf("Request method: LIST\n");
-	    //char * list_of_files = "filename1.ext\nfilename2.ext\nfilename3.ext\n";
-        //send(new_socket, list_of_files, strlen(list_of_files), 0);
-
-        // TODO check if folder exists
-        DIR *dp;
-        struct dirent *ep;
-
-        char server_user[] = "augusto";
-        char *folder = malloc(strlen(getenv("HOME"))+17+strlen(server_user)+1);
-        strcpy(folder,getenv("HOME"));
-        strcat(folder,"/server_sync_dir_");
-        strcat(folder, server_user);
-
-        // TODO ordenar arquivos pelo nome
-
-        dp = opendir (folder);
-        if (dp != NULL) {
-            while (ep = readdir (dp)) {
-                send(new_socket, ep->d_name, strlen(ep->d_name), 0);
-                //puts (ep->d_name);
-            }
-            (void) closedir (dp);
-        } else {
-            perror ("Couldn't open the directory");
+    // Accept and incoming connection
+    puts("Waiting for incoming connections...");
+    addrlen = sizeof(struct sockaddr_in);
+    pthread_t thread_id;
+    while((new_socket = accept(server_fd, (struct sockaddr * ) & address,
+            (socklen_t * ) & addrlen))) {
+        puts("Connection accepted");
+        if(pthread_create( &thread_id, NULL,  connection_handler, (void*) &new_socket) < 0) {
+            perror("could not create thread");
+            return 1;
         }
-
-		printf("List of files sent\n");
-    } else if (!strncmp(buffer, "DOWNLOAD", 8)) {
-        printf("Request method: DOWNLOAD\n");
-        printf("Filename: %s\n", buffer + 9);
-    } else if (!strncmp(buffer, "UPLOAD", 6)) {
-        printf("Request method: UPLOAD\n");
-				printf("Filename: %s\n", buffer + 7);
-    };
-		// TODO o que fazer se for algum método invalido?
-
-    //printf("BUFFER: %s\n", buffer);
+        // Now join the thread, so that we dont terminate before the thread
+        // pthread_join( thread_id, NULL);
+        puts("Handler assigned");
+    }
+    if (new_socket < 0) {
+        perror("accept failed");
+        return 1;
+    }
 
     return 0;
 }
@@ -114,4 +82,67 @@ void receive_file(char * file) {
 
 void send_file(char * file) {
 
+}
+
+// Handle connection for each client
+void *connection_handler(void *socket_desc) {
+	// Get the socket descriptor
+	int sock = *(int*)socket_desc;
+	int read_size;
+	char client_message[1024];
+
+	// Receive a message from client
+	while( (read_size = recv(sock, client_message, 1024, 0)) > 0 )  {
+		// end of string marker
+		client_message[read_size] = '\0';
+
+        if (!strncmp(client_message, "LIST", 4)) {
+            printf("Request method: LIST\n");
+    	    //char * list_of_files = "filename1.ext\nfilename2.ext\nfilename3.ext\n";
+            //send(new_socket, list_of_files, strlen(list_of_files), 0);
+
+            // TODO check if folder exists
+            DIR *dp;
+            struct dirent *ep;
+
+            char server_user[] = "augusto";
+            char *folder = malloc(strlen(getenv("HOME"))+17+strlen(server_user)+1);
+            strcpy(folder,getenv("HOME"));
+            strcat(folder,"/server_sync_dir_");
+            strcat(folder, server_user);
+
+            // TODO ordenar arquivos pelo nome
+
+            dp = opendir (folder);
+            if (dp != NULL) {
+                while ((ep = readdir (dp))) {
+                    // TODO exclude '.' and '..' from listing
+                    // TODO whats the difference  between write and send methods?
+                    write(sock, ep->d_name, strlen(ep->d_name));
+                    write(sock, "\n", 1);
+                }
+                (void) closedir (dp);
+            } else {
+                perror ("Couldn't open the directory");
+            }
+
+    		printf("List of files sent\n");
+        } else if (!strncmp(client_message, "DOWNLOAD", 8)) {
+            printf("Request method: DOWNLOAD\n");
+            printf("Filename: %s\n", client_message + 9);
+        } else if (!strncmp(client_message, "UPLOAD", 6)) {
+            printf("Request method: UPLOAD\n");
+    		printf("Filename: %s\n", client_message + 7);
+        };
+    		// TODO o que fazer se for algum método invalido?
+	}
+	if(read_size == 0) {
+		puts("Client disconnected");
+		fflush(stdout);
+	}
+	else if(read_size == -1) {
+		perror("recv failed");
+	}
+
+	return 0;
 }
