@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <pthread.h>
+#include <sys/stat.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxServer.h"
 
@@ -98,28 +99,28 @@ void *connection_handler(void *socket_desc) {
 
         if (!strncmp(client_message, "LIST", 4)) {
             printf("Request method: LIST\n");
-    	    //char * list_of_files = "filename1.ext\nfilename2.ext\nfilename3.ext\n";
-            //send(new_socket, list_of_files, strlen(list_of_files), 0);
 
-            // TODO check if folder exists
             DIR *dp;
             struct dirent *ep;
+            struct stat st = {0};
+            char folder[256];
+            char server_user[] = "usuario"; // TODO get user from where?
 
-            char server_user[] = "augusto";
-            char *folder = malloc(strlen(getenv("HOME"))+17+strlen(server_user)+1);
-            strcpy(folder,getenv("HOME"));
-            strcat(folder,"/server_sync_dir_");
-            strcat(folder, server_user);
+            // Define path to user folder on server.
+            sprintf(folder, "%s/server_sync_dir_%s", getenv("HOME"), server_user);
 
-            // TODO ordenar arquivos pelo nome
+            // Create folder if it doesn't exist
+            if (stat(folder, &st) == -1) {
+                mkdir(folder, 0700);
+            }
 
             dp = opendir (folder);
             if (dp != NULL) {
                 while ((ep = readdir (dp))) {
+                    // TODO ordenar arquivos pelo nome
                     // TODO exclude '.' and '..' from listing
                     // TODO whats the difference  between write and send methods?
                     write(sock, ep->d_name, strlen(ep->d_name));
-                    write(sock, "\n", 1);
                 }
                 (void) closedir (dp);
             } else {
@@ -134,7 +135,6 @@ void *connection_handler(void *socket_desc) {
             printf("Request method: UPLOAD\n");
     		printf("Filename: %s\n", client_message + 7);
         };
-    		// TODO o que fazer se for algum método invalido?
 	}
 	if(read_size == 0) {
 		puts("Client disconnected");

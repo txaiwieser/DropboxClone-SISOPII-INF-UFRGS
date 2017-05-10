@@ -1,4 +1,4 @@
-CC=gcc
+CC=clang
 LIB_DIR=./lib
 INC_DIR=./include
 BIN_DIR=./bin
