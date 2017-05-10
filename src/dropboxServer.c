@@ -30,10 +30,10 @@ int main(int argc, char * argv[]) {
     }
 
     // Forcefully attaching socket to the port
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, & opt, sizeof(opt))) {
+    /*if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, & opt, sizeof(opt))) {
         perror("setsockopt");
         exit(EXIT_FAILURE);
-    }
+    } TODO remove this? it's not working on mac and seems unnecessary */
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port);
@@ -96,11 +96,12 @@ void *connection_handler(void *socket_desc) {
 		// end of string marker
 		client_message[read_size] = '\0';
 
+        // LIST method
         if (!strncmp(client_message, "LIST", 4)) {
-            DIR *dp;
-            struct dirent *ep;
             char user_sync_dir_path[256];
             char username[] = "usuario"; // TODO get user from where?
+            struct dirent **namelist;
+            int i, n;
 
             printf("<~ %s requested LIST\n", username);
 
@@ -112,27 +113,31 @@ void *connection_handler(void *socket_desc) {
             makedir_if_not_exists(user_sync_dir_path);
 
             // List files
-            dp = opendir (user_sync_dir_path);
-            if (dp != NULL) {
-                while ((ep = readdir (dp))) {
-                    // TODO ordenar arquivos pelo nome
-                    // TODO exclude '.' and '..' from listing
-                    // TODO whats the difference  between write and send methods?
-                    write(sock, ep->d_name, strlen(ep->d_name));
+            n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
+            if(n >= 0){
+                for (i = 2; i < n; i++) { // Starting in i=2, it doesn't show '.' and '..'
+                    // TODO whats the difference between write and send methods?
+                    write(sock, namelist[i]->d_name, strlen(namelist[i]->d_name));
+                    write(sock, "\n", 1);
+                    free(namelist[i]);
                 }
-                (void) closedir (dp);
             } else {
-                perror ("Couldn't open the directory");
+                perror("Couldn't open the directory");
             }
+            free(namelist);
 
     		printf("~> List of files sent to %s\n", username);
 
         } else if (!strncmp(client_message, "DOWNLOAD", 8)) {
+
             printf("Request method: DOWNLOAD\n");
             printf("Filename: %s\n", client_message + 9);
+
         } else if (!strncmp(client_message, "UPLOAD", 6)) {
+
             printf("Request method: UPLOAD\n");
     		printf("Filename: %s\n", client_message + 7);
+
         };
 	}
 	if(read_size == 0) {
