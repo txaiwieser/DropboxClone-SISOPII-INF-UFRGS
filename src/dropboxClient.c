@@ -15,7 +15,7 @@ int server_port = 0, sock = 0;
 char server_user[MAXNAME];
 
 void cmdUpload(char *filename) {
-    // TODO verificar se foi passado um nome de arquivo válido (nao vazio?)
+    // TODO verificar se foi passado um nome de arquivo válido (nao vazio? existente?)
     // TODO fazer funcionar se houver espaços a mais antes do filename (e pode ser que haja depois também...)
     int valread;
     char buffer[1024] = {0};
@@ -34,7 +34,7 @@ void cmdUpload(char *filename) {
 };
 
 void cmdDownload(char *filename) {
-    // TODO verificar se foi passado um nome de arquivo válido (nao vazio?)
+    // TODO verificar se foi passado um nome de arquivo válido (nao vazio? existente?)
     // TODO fazer funcionar se houver espaços a mais antes do filename (e pode ser que haja depois também...)
     int valread;
     char buffer[1024] = {0};
