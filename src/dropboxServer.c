@@ -20,7 +20,7 @@ int main(int argc, char * argv[]) {
         return 1;
     }
 
-	port = atoi(argv[1]);
+	  port = atoi(argv[1]);
     printf("Server started on port %d\n", port);
 
     // Creating socket file descriptor
@@ -39,7 +39,7 @@ int main(int argc, char * argv[]) {
         perror("bind failed");
         exit(EXIT_FAILURE);
     }
-    if (listen(server_fd, 3) < 0) {
+    if (listen(server_fd, 3) < 0) { // TODO checar se esse valor 3 é a melhor opção
         perror("listen");
         exit(EXIT_FAILURE);
     }
