@@ -115,14 +115,15 @@ int main(int argc, char * argv[]) {
     // Handle user input
     while (1) {
         printf("Dropbox> ");
+        // TODO tratar caso usuário apenas dê um enter
         scanf("%s", cmd);
         if ((token = strtok(cmd, " \t")) != NULL) {
-            if (strcmp(token, "exit") == 0) {
-                break;
-            } else if (strcmp(token, "upload") == 0) {
+            if (strcmp(token, "exit") == 0) break;
+            else if (strcmp(token, "upload") == 0) {
               strcpy(filename, cmd+7);
               cmdUpload(filename);
-            } else if (strcmp(token, "download") == 0) {
+            }
+            else if (strcmp(token, "download") == 0) {
                 strcpy(filename, cmd+9);
                 cmdDownload(filename);
             }
@@ -130,7 +131,7 @@ int main(int argc, char * argv[]) {
             else if (strcmp(token, "get_sync_dir") == 0) cmdGetSyncDir();
             else if (strcmp(token, "help") == 0) cmdMan();
             else printf("Invalid command! Type 'help' to see the available commands\n");
-        }
+        } else { printf("aquii"); }
     }
 
     return 0;

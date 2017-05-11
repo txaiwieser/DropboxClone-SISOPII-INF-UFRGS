@@ -93,6 +93,9 @@ void *connection_handler(void *socket_desc) {
 		// end of string marker
 		client_message[read_size] = '\0';
 
+        // Define path to user folder on server
+        sprintf(user_sync_dir_path, "%s/server_sync_dir_%s", getenv("HOME"), username);
+
         // Create folder if it doesn't exist
         makedir_if_not_exists(user_sync_dir_path);
 
@@ -103,12 +106,9 @@ void *connection_handler(void *socket_desc) {
 
             printf("<~ %s requested LIST\n", username);
 
-            // Define path to user folder on server
-            sprintf(user_sync_dir_path, "%s/server_sync_dir_%s", getenv("HOME"), username);
-
             // List files
             n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
-            if(n >= 0){
+            if(n > 2){
                 for (i = 2; i < n; i++) { // Starting in i=2, it doesn't show '.' and '..'
                     // TODO should we use send or sendto? need to check whats the difference between write and them...
                     // TODO should it send a list of FILE_INFO_t instead of file names?
@@ -116,7 +116,10 @@ void *connection_handler(void *socket_desc) {
                     write(sock, "\n", 1);
                     free(namelist[i]);
                 }
+            } else if (n >= 0) { // empty directory
+                write(sock, "", 1);
             } else {
+                write(sock, "", 1);
                 perror("Couldn't open the directory");
             }
             free(namelist);
