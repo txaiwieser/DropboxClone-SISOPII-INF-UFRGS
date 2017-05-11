@@ -1,4 +1,5 @@
-#define MAXNAME 50 // TODO quanto?
+#include "dropboxUtil.h"
+
 #define MAXFILES 500 // TODO quanto?
 
 typedef struct file_info {

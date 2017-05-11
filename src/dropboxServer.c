@@ -10,18 +10,18 @@
 #include "../include/dropboxServer.h"
 
 int main(int argc, char * argv[]) {
-    if (argc != 2) { // Número incorreto de parametros
+    int server_fd, new_socket, port;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+
+    // Check number of parameters
+    if (argc != 2) {
         printf("Usage: %s <port>\n", argv[0]);
         return 1;
     }
 
-	int port = atoi(argv[1]);
+	port = atoi(argv[1]);
     printf("Server started on port %d\n", port);
-
-    int server_fd, new_socket;
-    struct sockaddr_in address;
-    int opt = 1;
-    int addrlen = sizeof(address);
 
     // Creating socket file descriptor
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
@@ -29,11 +29,6 @@ int main(int argc, char * argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    // Forcefully attaching socket to the port
-    /*if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, & opt, sizeof(opt))) {
-        perror("setsockopt");
-        exit(EXIT_FAILURE);
-    } TODO remove this? it's not working on mac and seems unnecessary */
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port);
@@ -116,7 +111,8 @@ void *connection_handler(void *socket_desc) {
             n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
             if(n >= 0){
                 for (i = 2; i < n; i++) { // Starting in i=2, it doesn't show '.' and '..'
-                    // TODO whats the difference between write and send methods?
+                    // TODO should we use send or sendto? need to check whats the difference between write and them...
+                    // TODO should it send a list of FILE_INFO_t instead of file names?
                     write(sock, namelist[i]->d_name, strlen(namelist[i]->d_name));
                     write(sock, "\n", 1);
                     free(namelist[i]);

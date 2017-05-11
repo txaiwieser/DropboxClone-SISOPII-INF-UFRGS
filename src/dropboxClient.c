@@ -12,7 +12,7 @@
 
 char server_host[256];
 int server_port = 0, sock = 0;
-char server_user[50]; // TODO what's the max username? or use malloc!
+char server_user[MAXNAME];
 
 void cmdUpload(char *filename) {
     // TODO verificar se foi passado um nome de arquivo válido (nao vazio?)
@@ -60,7 +60,7 @@ void cmdList() {
     valread = read(sock, buffer, 1024);
     printf("%s", buffer);
 
-    // TODO suportar uma lista "infinita" de arquivos
+    // TODO suportar uma lista enorme de arquivos
 };
 
 void cmdGetSyncDir() {
@@ -92,15 +92,17 @@ int main(int argc, char * argv[]) {
     char filename[256];
     char * token;
 
-    if (argc < 4) { // Número incorreto de parametros
+    // Check number of parameteres
+    if (argc < 4) {
         printf("Usage: %s <user> <IP> <port>\n", argv[0]);
         return 1;
     }
+
+    // Connect to server
     debug_printf("[Client started with parameters User=%s IP=%s Port=%s]\n", argv[1], argv[2], argv[3]);
     strcpy(server_host, argv[2]);
     strcpy(server_user, argv[1]);
     server_port = atoi(argv[3]);
-
     sock = connect_server(server_host, server_port);
     if (sock < 0) {
         return -1;
@@ -110,9 +112,10 @@ int main(int argc, char * argv[]) {
     printf("Welcome to Dropbox! - v 1.0\n");
     cmdMan();
 
+    // Handle user input
     while (1) {
         printf("Dropbox> ");
-        gets(cmd);
+        scanf("%s", cmd);
         if ((token = strtok(cmd, " \t")) != NULL) {
             if (strcmp(token, "exit") == 0) {
                 break;
