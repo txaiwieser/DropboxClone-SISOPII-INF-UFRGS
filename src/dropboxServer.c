@@ -85,16 +85,19 @@ void *connection_handler(void *socket_desc) {
 	int sock = *(int*)socket_desc;
 	int read_size;
 	char client_message[1024];
+    char user_sync_dir_path[256];
+    char username[] = "usuario"; // TODO get user from where?
 
 	// Receive a message from client
 	while( (read_size = recv(sock, client_message, 1024, 0)) > 0 )  {
 		// end of string marker
 		client_message[read_size] = '\0';
 
+        // Create folder if it doesn't exist
+        makedir_if_not_exists(user_sync_dir_path);
+
         // LIST method
         if (!strncmp(client_message, "LIST", 4)) {
-            char user_sync_dir_path[256];
-            char username[] = "usuario"; // TODO get user from where?
             struct dirent **namelist;
             int i, n;
 
@@ -102,10 +105,6 @@ void *connection_handler(void *socket_desc) {
 
             // Define path to user folder on server
             sprintf(user_sync_dir_path, "%s/server_sync_dir_%s", getenv("HOME"), username);
-
-            // Create folder if it doesn't exist
-            // TODO it should be done at the first time a user connects to the server, not here.
-            makedir_if_not_exists(user_sync_dir_path);
 
             // List files
             n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
