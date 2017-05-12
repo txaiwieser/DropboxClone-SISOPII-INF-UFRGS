@@ -9,10 +9,13 @@
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxServer.h"
 
+char username[MAXNAME];
+
 int main(int argc, char * argv[]) {
     int server_fd, new_socket, port;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
+    int read_size;
 
     // Check number of parameters
     if (argc != 2) {
@@ -51,6 +54,8 @@ int main(int argc, char * argv[]) {
     while((new_socket = accept(server_fd, (struct sockaddr * ) & address,
             (socklen_t * ) & addrlen))) {
         puts("Connection accepted");
+        //read_size = recv(new_socket, username, strlen(username), 0);
+
         if(pthread_create( &thread_id, NULL,  connection_handler, (void*) &new_socket) < 0) {
             perror("could not create thread");
             return 1;
@@ -85,19 +90,23 @@ void *connection_handler(void *socket_desc) {
 	int sock = *(int*)socket_desc;
 	int read_size;
 	char client_message[1024];
-    char user_sync_dir_path[256];
-    char username[] = "usuario"; // TODO get user from where?
+  char send_buffer[1024];
+  char user_sync_dir_path[256];
+  char filename_string[256];
+
+  read_size = recv(sock, username, sizeof(username), 0);
+
+  // Define path to user folder on server
+  sprintf(user_sync_dir_path, "%s/server_sync_dir_%s", getenv("HOME"), username);
+
+  // Create folder if it doesn't exist
+  makedir_if_not_exists(user_sync_dir_path);
 
 	// Receive a message from client
-	while( (read_size = recv(sock, client_message, 1024, 0)) > 0 )  {
+	while( (read_size = recv(sock, client_message, sizeof(client_message), 0)) > 0 )  {
 		// end of string marker
 		client_message[read_size] = '\0';
 
-        // Define path to user folder on server
-        sprintf(user_sync_dir_path, "%s/server_sync_dir_%s", getenv("HOME"), username);
-
-        // Create folder if it doesn't exist
-        makedir_if_not_exists(user_sync_dir_path);
 
         // LIST method
         if (!strncmp(client_message, "LIST", 4)) {
@@ -111,11 +120,20 @@ void *connection_handler(void *socket_desc) {
             if(n > 2){
                 for (i = 2; i < n; i++) { // Starting in i=2, it doesn't show '.' and '..'
                     // TODO should we use send or sendto? need to check whats the difference between write and them...
-                    // TODO should it send a list of FILE_INFO_t instead of file names?
-                    write(sock, namelist[i]->d_name, strlen(namelist[i]->d_name));
-                    write(sock, "\n", 1);
-                    free(namelist[i]);
+                    sprintf(filename_string, "%s\n", namelist[i]->d_name);
+                    // if buffer has enough space, insert complete filename
+                    if(strlen(send_buffer) + strlen(filename_string) < sizeof(send_buffer)){
+                      strcpy(send_buffer+strlen(send_buffer), filename_string);
+                      free(namelist[i]);
+                    } else {
+                      int space_available = sizeof(send_buffer) - strlen(send_buffer) -1; // TODO -1 ?
+                      strncpy(send_buffer+strlen(send_buffer), filename_string, space_available); // insere no buffer o numero de caracteres que ainda cabem
+                      write(sock, send_buffer, strlen(send_buffer));
+                      strcpy(send_buffer+strlen(send_buffer), filename_string+space_available);
+                      free(namelist[i]);
+                    }
                 }
+                write(sock, send_buffer, strlen(send_buffer));
             } else if (n >= 0) { // empty directory
                 write(sock, "", 1);
             } else {

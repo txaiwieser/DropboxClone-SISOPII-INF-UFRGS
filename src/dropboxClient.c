@@ -60,7 +60,7 @@ void cmdList() {
     valread = read(sock, buffer, 1024);
     printf("%s", buffer);
 
-    // TODO suportar uma lista enorme de arquivos
+    // TODO usar while para receber mais buffers de filenames caso haja
 };
 
 void cmdGetSyncDir() {
@@ -108,6 +108,9 @@ int main(int argc, char * argv[]) {
         return -1;
     }
     debug_printf("[Connection established. Socket number %d]\n", sock);
+
+    // Send username to server
+    write(sock, server_user, strlen(server_user));
 
     printf("Welcome to Dropbox! - v 1.0\n");
     cmdMan();
