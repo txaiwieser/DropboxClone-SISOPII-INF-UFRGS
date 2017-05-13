@@ -23,20 +23,18 @@ void makedir_if_not_exists(const char* path){
 
 
 int isValidFilename(char *filename){
+    // TODO filenames can have spaces?
     /* Remove spaces from filename */
     int count = 0;
-    // Traverse the given string. If current character
-    // is not space, then place it at index 'count++'
-    for (int i = 0; str[i]; i++)
-        if (str[i] != ' ')
-            str[count++] = str[i]; // here count is
-                                   // incremented
-    str[count] = '\0';
+    for (int i = 0; filename[i]; i++)
+        if (filename[i] != ' ')
+            filename[count++] = filename[i];
+    filename[count] = '\0';
 
 
     // TODO check if filename exists
 
-    // TODO return? 
+    // TODO return?
 
     return 0;
 }
