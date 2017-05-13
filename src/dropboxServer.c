@@ -140,12 +140,13 @@ void *connection_handler(void *socket_desc) {
         } else if (!strncmp(client_message, "DOWNLOAD", 8)) {
 
             printf("Request method: DOWNLOAD\n");
-            printf("Filename: %s\n", client_message + 9);
+            receive_file(client_message + 9);
 
         } else if (!strncmp(client_message, "UPLOAD", 6)) {
 
             printf("Request method: UPLOAD\n");
-    		printf("Filename: %s\n", client_message + 7);
+    		    printf("Filename: %s\n", client_message + 7);
+            send_file(client_message + 7);
 
         };
 	}

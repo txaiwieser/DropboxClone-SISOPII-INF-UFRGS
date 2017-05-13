@@ -16,8 +16,6 @@ int server_port = 0, sock = 0;
 char server_user[MAXNAME];
 
 void send_file(char *file) {
-    // TODO verificar se foi passado um nome de arquivo válido (nao vazio? existente?)
-    // TODO fazer funcionar se houver espaços a mais antes do filename (e pode ser que haja depois também...)
     int valread;
     char buffer[1024] = {0};
     char method[160];
@@ -34,14 +32,23 @@ void send_file(char *file) {
 };
 
 void get_file(char *file) {
-    // TODO verificar se foi passado um nome de arquivo válido (nao vazio? existente?)
-    // TODO fazer funcionar se houver espaços a mais antes do filename (e pode ser que haja depois também...)
-    int valread;
+    int valread, nLeft;
     char buffer[1024] = {0};
     char method[160];
 
     // Concatenate strings to get method = "DOWNLOAD filename"
     sprintf(method, "DOWNLOAD %s", file);
+
+    // Receive length
+    read(sock, &nLeft, sizeof(nLeft));
+    nLeft = ntohl(nLeft);
+
+    /* Receive data in chunks */
+    while(nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0){
+      buffer[valread] = '\0';
+      printf("%s", buffer);
+      nLeft -= valread;
+    }
 
     // Send to the server
     send(sock, method, strlen(method), 0);
