@@ -11,11 +11,16 @@
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxClient.h"
 
+// TODO checar se os valores máximos das strings e os tipos (int) são suficientes?
+// TODO do these variables need to be global?
 char server_host[256];
 int server_port = 0, sock = 0;
 char server_user[MAXNAME];
 char user_sync_dir_path[256];
 
+// TODO tratar erros nessa funcao e nas similares, do cliente e servidor. Se há um problem ao abrir arquivo, nao deve prosseguir.
+// TODO Usuário insere o path completo para o arquivo no terminal, nao o caminho relativo ao sync_dir
+// TODO colocar mensagem de debug dizendo que arquivo foi enviado ou nao, etc, nessa funcao e nas similares
 void send_file(char *file) {
     int valread, length_converted; // TODO is int enough for length_converted?
     char buffer[1024] = {0};
@@ -188,6 +193,7 @@ int main(int argc, char * argv[]) {
                 send_file(filename);
             }
             else if (strcmp(token, "download") == 0) {
+                // TODO não permitir download se o sync_dir do usuario nao existir. (Mostrar msg dizendo que deve dar um get_sync_dir)
                 scanf("%s", filename);
                 get_file(filename);
             }

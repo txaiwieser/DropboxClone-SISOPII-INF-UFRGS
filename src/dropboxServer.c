@@ -11,6 +11,9 @@
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxServer.h"
 
+// TODO usar structs!
+// TODO checar se os valores máximos das strings e os tipos (int) são suficientes?
+// TODO do these variables need to be global?
 char username[MAXNAME];
 char user_sync_dir_path[256];
 int sock;
@@ -75,7 +78,7 @@ int main(int argc, char * argv[]) {
 }
 
 void sync_server() {
-
+  // TODO sync_server
 }
 
 void receive_file(char * file) {
