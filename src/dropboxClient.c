@@ -133,8 +133,10 @@ int main(int argc, char * argv[]) {
               send_file(filename);
             }
             else if (strcmp(token, "download") == 0) {
-                strcpy(filename, cmd+9);
-                printf("filenamee %s\n", filename);
+                //strcpy(filename, cmd+9);
+                sprintf(filename, "%s", cmd+9);
+                removeSpaces(&filename);
+                printf("filename=%s\n", filename);
                 get_file(filename);
             }
             else if (strcmp(token, "list") == 0) cmdList();

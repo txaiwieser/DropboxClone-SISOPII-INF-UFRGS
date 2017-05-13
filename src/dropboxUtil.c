@@ -20,3 +20,23 @@ void makedir_if_not_exists(const char* path){
       mkdir(path, 0700);
   }
 }
+
+
+int isValidFilename(char *filename){
+    /* Remove spaces from filename */
+    int count = 0;
+    // Traverse the given string. If current character
+    // is not space, then place it at index 'count++'
+    for (int i = 0; str[i]; i++)
+        if (str[i] != ' ')
+            str[count++] = str[i]; // here count is
+                                   // incremented
+    str[count] = '\0';
+
+
+    // TODO check if filename exists
+
+    // TODO return? 
+
+    return 0;
+}
