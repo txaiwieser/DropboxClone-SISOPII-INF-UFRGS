@@ -129,6 +129,7 @@ void *connection_handler(void *socket_desc) {
                     free(namelist[i]);
                 }
             } else {
+                write(sock, "", 1);
                 perror("Couldn't open the directory");
             }
             free(namelist);
