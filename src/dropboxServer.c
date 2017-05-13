@@ -79,7 +79,32 @@ void sync_server() {
 }
 
 void receive_file(char * file) {
+  int valread, nLeft;
+  char buffer[1024] = {0};
+  char file_path[256];
 
+  sprintf(file_path, "%s/%s", user_sync_dir_path, file);
+
+  /* Create file where data will be stored */
+  FILE *fp;
+  fp = fopen(file_path, "ab");
+  if(NULL == fp){
+      printf("Error opening file");
+  }
+
+  // Receive length
+  valread = read(sock, &nLeft, sizeof(nLeft));
+  nLeft = ntohl(nLeft);
+
+  /* Receive data in chunks */
+  while(nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0){
+    fwrite(buffer, 1, valread, fp);
+    nLeft -= valread;
+  }
+  if(valread < 0) {
+      printf("\n Read Error \n");
+  }
+  fclose (fp);
 }
 
 void send_file(char * file) {
@@ -89,44 +114,40 @@ void send_file(char * file) {
   struct stat st;
   stat(file_path, &st);
 
-  printf("filepath= %s\n", file_path);
-
   /* Open the file that we wish to transfer */
   FILE *fp = fopen(file_path,"rb");
-  if(fp==NULL){
-      printf("File opern error");
-      return 1; // TODO what to do?
+  if(fp == NULL){
+      length_converted = htonl(0);
+      write(sock, &length_converted, sizeof(length_converted));
+      printf("File open error");
   }
 
-  // Send file size
+  /* Send file size to client */
   length_converted = htonl(st.st_size);
   write(sock, &length_converted, sizeof(length_converted));
 
   /* Read data from file and send it */
   while(1){
       /* First read file in chunks of 1024 bytes */
-      unsigned char buff[1024]={0};
-      int nread = fread(buff,1,sizeof(buff),fp);
-      printf("Bytes read %d \n", nread);
+      unsigned char buff[1024] = {0};
+      int nread = fread(buff, 1, sizeof(buff), fp);
 
       /* If read was success, send data. */
       if(nread > 0) {
-          printf("Sending \n");
           write(sock, buff, nread);
       }
 
-      /*
-       * There is something tricky going on with read ..
-       * Either there was error, or we reached end of file.
-       */
+      /* Either there was error, or reached end of file */
       if (nread < sizeof(buff)) {
-          if (feof(fp))
-              printf("End of file\n");
+          /*if (feof(fp))
+              debug_printf("End of file\n"); */
           if (ferror(fp))
               printf("Error reading\n");
           break;
       }
     }
+
+    fclose(fp);
 }
 
 // Handle connection for each client

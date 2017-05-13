@@ -9,7 +9,7 @@
 - [x] Ver como acoes vao ser passadas para o servidor e vice-versa
 - [x] get_sync_dir
 - [x] list
-- [ ] upload
+- [x] upload
 - [x] download
 - [ ] outras coisas
 - [x] .gitignore

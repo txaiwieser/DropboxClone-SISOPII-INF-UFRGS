@@ -17,9 +17,14 @@ char server_user[MAXNAME];
 char user_sync_dir_path[256];
 
 void send_file(char *file) {
-    int valread;
+    int valread, length_converted; // TODO is int enough for length_converted?
     char buffer[1024] = {0};
     char method[160];
+    char file_path[256];
+    struct stat st;
+
+    sprintf(file_path, "%s/%s", user_sync_dir_path, file);
+    stat(file_path, &st);
 
     // Concatenate strings to get method = "UPLOAD filename"
     sprintf(method, "UPLOAD %s", file);
@@ -27,9 +32,42 @@ void send_file(char *file) {
     // Call to the server
     send(sock, method, strlen(method), 0);
     debug_printf("[%s method sent]\n", method);
-    valread = read(sock, buffer, 1024);
 
-    //printf("Uploading file %s\n", filename)
+    /* Open the file that we wish to transfer */
+    FILE *fp = fopen(file_path,"rb");
+    if(fp == NULL){
+        length_converted = htonl(0);
+        write(sock, &length_converted, sizeof(length_converted));
+        printf("File open error");
+    }
+
+    /* Send file size to server */
+    length_converted = htonl(st.st_size);
+    printf("lengthconverted = %d", st.st_size);
+    write(sock, &length_converted, sizeof(length_converted));
+
+    /* Read data from file and send it */
+    while(1){
+        /* First read file in chunks of 1024 bytes */
+        unsigned char buff[1024] = {0};
+        int nread = fread(buff, 1, sizeof(buff), fp);
+
+        /* If read was success, send data. */
+        if(nread > 0) {
+            write(sock, buff, nread);
+        }
+
+        /* Either there was error, or reached end of file */
+        if (nread < sizeof(buff)) {
+            /*if (feof(fp))
+                debug_printf("End of file\n"); */
+            if (ferror(fp))
+                printf("Error reading\n");
+            break;
+        }
+      }
+
+    fclose(fp);
 };
 
 void get_file(char *file) {
@@ -52,11 +90,10 @@ void get_file(char *file) {
     fp = fopen(file_path, "ab");
     if(NULL == fp){
         printf("Error opening file");
-        return 1;
     }
 
     // Receive length
-    read(sock, &nLeft, sizeof(nLeft));
+    valread = read(sock, &nLeft, sizeof(nLeft));
     nLeft = ntohl(nLeft);
 
     /* Receive data in chunks */
@@ -69,8 +106,6 @@ void get_file(char *file) {
     }
 
     fclose (fp);
-
-    //printf("Downloading file %s\n", filename)
 };
 
 void cmdList() {
