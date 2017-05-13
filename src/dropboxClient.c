@@ -127,7 +127,7 @@ int main(int argc, char * argv[]) {
     while (1) {
         printf("Dropbox> ");
         // TODO tratar caso usuário apenas dê um enter
-        scanf("%s", cmd);
+        scanf(" %[^\t\n]s",&cmd);
         if ((token = strtok(cmd, " \t")) != NULL) {
             if (strcmp(token, "exit") == 0) break;
             else if (strcmp(token, "upload") == 0) {
@@ -136,6 +136,7 @@ int main(int argc, char * argv[]) {
             }
             else if (strcmp(token, "download") == 0) {
                 strcpy(filename, cmd+9);
+                printf("filenamee %s\n", filename);
                 cmdDownload(filename);
             }
             else if (strcmp(token, "list") == 0) cmdList();
