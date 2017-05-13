@@ -92,8 +92,9 @@ void *connection_handler(void *socket_desc) {
   char user_sync_dir_path[256];
   char filename_string[256];
 
+  // Receive username from client
   read_size = recv(sock, username, sizeof(username), 0);
-  client_message[read_size] = '\0';
+  username[read_size] = '\0';
 
   // Define path to user folder on server
   sprintf(user_sync_dir_path, "%s/server_sync_dir_%s", getenv("HOME"), username);
@@ -105,7 +106,6 @@ void *connection_handler(void *socket_desc) {
 	while( (read_size = recv(sock, client_message, sizeof(client_message), 0)) > 0 )  {
 		// end of string marker
 		client_message[read_size] = '\0';
-
 
         // LIST method
         if (!strncmp(client_message, "LIST", 4)) {
@@ -129,8 +129,9 @@ void *connection_handler(void *socket_desc) {
                     free(namelist[i]);
                 }
             } else {
-                write(sock, "", 1);
                 perror("Couldn't open the directory");
+                nListConverted = htonl(0);
+                write(sock, &nListConverted, sizeof(nListConverted));
             }
             free(namelist);
 
