@@ -19,17 +19,22 @@ char server_user[MAXNAME];
 char user_sync_dir_path[256];
 
 // TODO tratar erros nessa funcao e nas similares, do cliente e servidor. Se há um problem ao abrir arquivo, nao deve prosseguir.
-// TODO Usuário insere o path completo para o arquivo no terminal, nao o caminho relativo ao sync_dir
 // TODO colocar mensagem de debug dizendo que arquivo foi enviado ou nao, etc, nessa funcao e nas similares
 void send_file(char *file) {
     int valread, length_converted; // TODO is int enough for length_converted?
-    char buffer[1024] = {0};
     char method[160];
     char file_path[256];
     struct stat st;
 
     sprintf(file_path, "%s/%s", user_sync_dir_path, file);
     stat(file_path, &st);
+
+    /* Open the file that we wish to transfer */
+    FILE *fp = fopen(file_path,"rb");
+    if(fp == NULL){
+        printf("File open error");
+        // TODO exit
+    }
 
     // Concatenate strings to get method = "UPLOAD filename"
     sprintf(method, "UPLOAD %s", file);
@@ -38,17 +43,8 @@ void send_file(char *file) {
     send(sock, method, strlen(method), 0);
     debug_printf("[%s method sent]\n", method);
 
-    /* Open the file that we wish to transfer */
-    FILE *fp = fopen(file_path,"rb");
-    if(fp == NULL){
-        length_converted = htonl(0);
-        write(sock, &length_converted, sizeof(length_converted));
-        printf("File open error");
-    }
-
     /* Send file size to server */
     length_converted = htonl(st.st_size);
-    printf("lengthconverted = %d", st.st_size);
     write(sock, &length_converted, sizeof(length_converted));
 
     /* Read data from file and send it */
