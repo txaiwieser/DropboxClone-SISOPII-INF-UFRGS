@@ -14,9 +14,9 @@
 // TODO usar structs!
 // TODO checar se os valores máximos das strings e os tipos (int) são suficientes?
 // TODO essas variaveis não podem ser globais, pois são compartilhadas por todas threads!
-char username[MAXNAME];
-char user_sync_dir_path[256];
-int sock;
+__thread char username[MAXNAME];
+__thread char user_sync_dir_path[256];
+__thread int sock;
 
 int main(int argc, char * argv[]) {
     int server_fd, new_socket, port;
