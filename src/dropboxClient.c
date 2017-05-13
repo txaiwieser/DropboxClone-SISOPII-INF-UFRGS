@@ -135,7 +135,6 @@ int main(int argc, char * argv[]) {
             else if (strcmp(token, "download") == 0) {
                 //strcpy(filename, cmd+9);
                 sprintf(filename, "%s", cmd+9);
-                removeSpaces(&filename);
                 printf("filename=%s\n", filename);
                 get_file(filename);
             }
