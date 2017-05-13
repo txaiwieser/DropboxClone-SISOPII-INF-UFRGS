@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <netdb.h>
+#include <libgen.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxClient.h"
 
@@ -24,18 +25,17 @@ void send_file(char *file) {
     int valread, length_converted; // TODO is int enough for length_converted?
     char method[160];
     struct stat st;
-
-    stat(file, &st);
+    int stat_result = stat(file, &st);
 
     /* Open the file that we wish to transfer */
-    FILE *fp = fopen(file,"rb");
-    if(fp == NULL){
-        printf("File open error");
-    } else {
+
+    if( stat_result == 0 ) {
+      FILE *fp = fopen(file,"rb");
+      if(fp == NULL){
+          printf("File open error");
 
       // Concatenate strings to get method = "UPLOAD filename"
-      // TODO remover o path, deixar só o nome do arquivo
-      sprintf(method, "UPLOAD %s", file);
+      sprintf(method, "UPLOAD %s", basename(file));
 
       // Call to the server
       send(sock, method, strlen(method), 0);
@@ -67,6 +67,9 @@ void send_file(char *file) {
         }
     }
     fclose(fp);
+  } else {
+    printf("File doesn't exist! Pass a valid filename.\n");
+  }
 };
 
 void get_file(char *file) {
@@ -183,6 +186,7 @@ int main(int argc, char * argv[]) {
             if (strcmp(token, "exit") == 0) break;
             else if (strcmp(token, "upload") == 0) {
                 scanf("%s", filename);
+                // TODO copiar arquivo para pasta sync_dir. Mas e aí se ja tiver um outro arquivo com esse nome?
                 send_file(filename);
             }
             else if (strcmp(token, "download") == 0) {
@@ -232,7 +236,7 @@ int connect_server(char * host, int port) {
 }
 
 void sync_client() {
-
+  // TODO sync_client
 }
 
 void close_connection() {

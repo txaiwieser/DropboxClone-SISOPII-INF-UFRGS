@@ -13,7 +13,7 @@
 
 // TODO usar structs!
 // TODO checar se os valores máximos das strings e os tipos (int) são suficientes?
-// TODO do these variables need to be global?
+// TODO essas variaveis não podem ser globais, pois são compartilhadas por todas threads!
 char username[MAXNAME];
 char user_sync_dir_path[256];
 int sock;
@@ -115,41 +115,45 @@ void send_file(char * file) {
   sprintf(file_path, "%s/%s", user_sync_dir_path, file);
   int length_converted; // TODO is int enough?
   struct stat st;
-  stat(file_path, &st);
+  int stat_result = stat(file_path, &st);
 
-  /* Open the file that we wish to transfer */
-  FILE *fp = fopen(file_path,"rb");
-  if(fp == NULL){
-      length_converted = htonl(0);
+  if( stat_result == 0 ) { // If file exists
+    /* Open the file that we wish to transfer */
+    FILE *fp = fopen(file_path,"rb");
+    if(fp == NULL){
+        length_converted = htonl(0);
+        write(sock, &length_converted, sizeof(length_converted));
+        printf("File open error");
+    } else {
+      /* Send file size to client */
+      length_converted = htonl(st.st_size);
       write(sock, &length_converted, sizeof(length_converted));
-      printf("File open error");
-  } else {
-    /* Send file size to client */
-    length_converted = htonl(st.st_size);
-    write(sock, &length_converted, sizeof(length_converted));
 
-    /* Read data from file and send it */
-    while(1){
-        /* First read file in chunks of 1024 bytes */
-        unsigned char buff[1024] = {0};
-        int nread = fread(buff, 1, sizeof(buff), fp);
+      /* Read data from file and send it */
+      while(1){
+          /* First read file in chunks of 1024 bytes */
+          unsigned char buff[1024] = {0};
+          int nread = fread(buff, 1, sizeof(buff), fp);
 
-        /* If read was success, send data. */
-        if(nread > 0) {
-            write(sock, buff, nread);
-        }
+          /* If read was success, send data. */
+          if(nread > 0) {
+              write(sock, buff, nread);
+          }
 
-        /* Either there was error, or reached end of file */
-        if (nread < sizeof(buff)) {
-            /*if (feof(fp))
-                debug_printf("End of file\n"); */
-            if (ferror(fp))
-                printf("Error reading\n");
-            break;
+          /* Either there was error, or reached end of file */
+          if (nread < sizeof(buff)) {
+              /*if (feof(fp))
+                  debug_printf("End of file\n"); */
+              if (ferror(fp))
+                  printf("Error reading\n");
+              break;
+          }
         }
       }
-    }
-    fclose(fp);
+      fclose(fp);
+    } else {
+      printf("File doesn't exist!\n");
+  }
 }
 
 // Handle connection for each client
