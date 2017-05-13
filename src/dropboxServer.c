@@ -93,19 +93,19 @@ void receive_file(char * file) {
   fp = fopen(file_path, "ab");
   if(NULL == fp){
       printf("Error opening file");
-  }
+  } else {
+    // Receive length
+    valread = read(sock, &nLeft, sizeof(nLeft));
+    nLeft = ntohl(nLeft);
 
-  // Receive length
-  valread = read(sock, &nLeft, sizeof(nLeft));
-  nLeft = ntohl(nLeft);
-
-  /* Receive data in chunks */
-  while(nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0){
-    fwrite(buffer, 1, valread, fp);
-    nLeft -= valread;
-  }
-  if(valread < 0) {
-      printf("\n Read Error \n");
+    /* Receive data in chunks */
+    while(nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0){
+      fwrite(buffer, 1, valread, fp);
+      nLeft -= valread;
+    }
+    if(valread < 0) {
+        printf("\n Read Error \n");
+    }
   }
   fclose (fp);
 }
@@ -123,33 +123,32 @@ void send_file(char * file) {
       length_converted = htonl(0);
       write(sock, &length_converted, sizeof(length_converted));
       printf("File open error");
-  }
+  } else {
+    /* Send file size to client */
+    length_converted = htonl(st.st_size);
+    write(sock, &length_converted, sizeof(length_converted));
 
-  /* Send file size to client */
-  length_converted = htonl(st.st_size);
-  write(sock, &length_converted, sizeof(length_converted));
+    /* Read data from file and send it */
+    while(1){
+        /* First read file in chunks of 1024 bytes */
+        unsigned char buff[1024] = {0};
+        int nread = fread(buff, 1, sizeof(buff), fp);
 
-  /* Read data from file and send it */
-  while(1){
-      /* First read file in chunks of 1024 bytes */
-      unsigned char buff[1024] = {0};
-      int nread = fread(buff, 1, sizeof(buff), fp);
+        /* If read was success, send data. */
+        if(nread > 0) {
+            write(sock, buff, nread);
+        }
 
-      /* If read was success, send data. */
-      if(nread > 0) {
-          write(sock, buff, nread);
-      }
-
-      /* Either there was error, or reached end of file */
-      if (nread < sizeof(buff)) {
-          /*if (feof(fp))
-              debug_printf("End of file\n"); */
-          if (ferror(fp))
-              printf("Error reading\n");
-          break;
+        /* Either there was error, or reached end of file */
+        if (nread < sizeof(buff)) {
+            /*if (feof(fp))
+                debug_printf("End of file\n"); */
+            if (ferror(fp))
+                printf("Error reading\n");
+            break;
+        }
       }
     }
-
     fclose(fp);
 }
 

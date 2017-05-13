@@ -26,48 +26,46 @@ void send_file(char *file) {
     char file_path[256];
     struct stat st;
 
-    sprintf(file_path, "%s/%s", user_sync_dir_path, file);
     stat(file_path, &st);
 
     /* Open the file that we wish to transfer */
-    FILE *fp = fopen(file_path,"rb");
+    FILE *fp = fopen(file,"rb");
     if(fp == NULL){
         printf("File open error");
-        // TODO exit
+    } else {
+
+      // Concatenate strings to get method = "UPLOAD filename"
+      sprintf(method, "UPLOAD %s", file);
+
+      // Call to the server
+      send(sock, method, strlen(method), 0);
+      debug_printf("[%s method sent]\n", method);
+
+      /* Send file size to server */
+      length_converted = htonl(st.st_size);
+      write(sock, &length_converted, sizeof(length_converted));
+
+      /* Read data from file and send it */
+      while(1){
+          /* First read file in chunks of 1024 bytes */
+          unsigned char buff[1024] = {0};
+          int nread = fread(buff, 1, sizeof(buff), fp);
+
+          /* If read was success, send data. */
+          if(nread > 0) {
+              write(sock, buff, nread);
+          }
+
+          /* Either there was error, or reached end of file */
+          if (nread < sizeof(buff)) {
+              /*if (feof(fp))
+                  debug_printf("End of file\n"); */
+              if (ferror(fp))
+                  printf("Error reading\n");
+              break;
+          }
+        }
     }
-
-    // Concatenate strings to get method = "UPLOAD filename"
-    sprintf(method, "UPLOAD %s", file);
-
-    // Call to the server
-    send(sock, method, strlen(method), 0);
-    debug_printf("[%s method sent]\n", method);
-
-    /* Send file size to server */
-    length_converted = htonl(st.st_size);
-    write(sock, &length_converted, sizeof(length_converted));
-
-    /* Read data from file and send it */
-    while(1){
-        /* First read file in chunks of 1024 bytes */
-        unsigned char buff[1024] = {0};
-        int nread = fread(buff, 1, sizeof(buff), fp);
-
-        /* If read was success, send data. */
-        if(nread > 0) {
-            write(sock, buff, nread);
-        }
-
-        /* Either there was error, or reached end of file */
-        if (nread < sizeof(buff)) {
-            /*if (feof(fp))
-                debug_printf("End of file\n"); */
-            if (ferror(fp))
-                printf("Error reading\n");
-            break;
-        }
-      }
-
     fclose(fp);
 };
 
@@ -91,21 +89,20 @@ void get_file(char *file) {
     fp = fopen(file_path, "ab");
     if(NULL == fp){
         printf("Error opening file");
-    }
+    } else {
+      // Receive length
+      valread = read(sock, &nLeft, sizeof(nLeft));
+      nLeft = ntohl(nLeft);
 
-    // Receive length
-    valread = read(sock, &nLeft, sizeof(nLeft));
-    nLeft = ntohl(nLeft);
-
-    /* Receive data in chunks */
-    while(nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0){
-      fwrite(buffer, 1, valread, fp);
-      nLeft -= valread;
+      /* Receive data in chunks */
+      while(nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0){
+        fwrite(buffer, 1, valread, fp);
+        nLeft -= valread;
+      }
+      if(valread < 0) {
+          printf("\n Read Error \n");
+      }
     }
-    if(valread < 0) {
-        printf("\n Read Error \n");
-    }
-
     fclose (fp);
 };
 
