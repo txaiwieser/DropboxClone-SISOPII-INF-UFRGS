@@ -93,6 +93,7 @@ void *connection_handler(void *socket_desc) {
   char filename_string[256];
 
   read_size = recv(sock, username, sizeof(username), 0);
+  client_message[read_size] = '\0';
 
   // Define path to user folder on server
   sprintf(user_sync_dir_path, "%s/server_sync_dir_%s", getenv("HOME"), username);

@@ -65,6 +65,7 @@ void cmdList() {
 
     /* Receive data in chunks */
     while(nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0){
+      buffer[valread] = '\0';
       printf("%s", buffer);
       nLeft -= valread;
     }
