@@ -7,10 +7,13 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <pthread.h>
+#include <sys/stat.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxServer.h"
 
 char username[MAXNAME];
+char user_sync_dir_path[256];
+int sock;
 
 int main(int argc, char * argv[]) {
     int server_fd, new_socket, port;
@@ -80,16 +83,58 @@ void receive_file(char * file) {
 }
 
 void send_file(char * file) {
+  char file_path[256];
+  sprintf(file_path, "%s/%s", user_sync_dir_path, file);
+  int length_converted; // TODO is int enough?
+  struct stat st;
+  stat(file_path, &st);
 
+  printf("filepath= %s\n", file_path);
+
+  /* Open the file that we wish to transfer */
+  FILE *fp = fopen(file_path,"rb");
+  if(fp==NULL){
+      printf("File opern error");
+      return 1; // TODO what to do?
+  }
+
+  // Send file size
+  length_converted = htonl(st.st_size);
+  write(sock, &length_converted, sizeof(length_converted));
+
+  /* Read data from file and send it */
+  while(1){
+      /* First read file in chunks of 1024 bytes */
+      unsigned char buff[1024]={0};
+      int nread = fread(buff,1,sizeof(buff),fp);
+      printf("Bytes read %d \n", nread);
+
+      /* If read was success, send data. */
+      if(nread > 0) {
+          printf("Sending \n");
+          write(sock, buff, nread);
+      }
+
+      /*
+       * There is something tricky going on with read ..
+       * Either there was error, or we reached end of file.
+       */
+      if (nread < sizeof(buff)) {
+          if (feof(fp))
+              printf("End of file\n");
+          if (ferror(fp))
+              printf("Error reading\n");
+          break;
+      }
+    }
 }
 
 // Handle connection for each client
 void *connection_handler(void *socket_desc) {
 	// Get the socket descriptor
-	int sock = *(int*)socket_desc;
+	sock = *(int*)socket_desc;
 	int read_size;
 	char client_message[1024];
-  char user_sync_dir_path[256];
   char filename_string[256];
 
   // Receive username from client
@@ -140,14 +185,11 @@ void *connection_handler(void *socket_desc) {
         } else if (!strncmp(client_message, "DOWNLOAD", 8)) {
 
             printf("Request method: DOWNLOAD\n");
-            receive_file(client_message + 9);
+            send_file(client_message + 9);
 
         } else if (!strncmp(client_message, "UPLOAD", 6)) {
-
             printf("Request method: UPLOAD\n");
-    		    printf("Filename: %s\n", client_message + 7);
-            send_file(client_message + 7);
-
+            receive_file(client_message + 7);
         };
 	}
 	if(read_size == 0) {

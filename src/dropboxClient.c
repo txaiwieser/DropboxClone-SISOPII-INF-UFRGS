@@ -14,6 +14,7 @@
 char server_host[256];
 int server_port = 0, sock = 0;
 char server_user[MAXNAME];
+char user_sync_dir_path[256];
 
 void send_file(char *file) {
     int valread;
@@ -35,9 +36,24 @@ void get_file(char *file) {
     int valread, nLeft;
     char buffer[1024] = {0};
     char method[160];
+    char file_path[256];
+
+    sprintf(file_path, "%s/%s", user_sync_dir_path, file);
 
     // Concatenate strings to get method = "DOWNLOAD filename"
     sprintf(method, "DOWNLOAD %s", file);
+
+    // Send to the server
+    send(sock, method, strlen(method), 0);
+    debug_printf("[%s method sent]\n", method);
+
+    /* Create file where data will be stored */
+    FILE *fp;
+    fp = fopen(file_path, "ab");
+    if(NULL == fp){
+        printf("Error opening file");
+        return 1;
+    }
 
     // Receive length
     read(sock, &nLeft, sizeof(nLeft));
@@ -45,15 +61,14 @@ void get_file(char *file) {
 
     /* Receive data in chunks */
     while(nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0){
-      buffer[valread] = '\0';
-      printf("%s", buffer);
+      fwrite(buffer, 1, valread, fp);
       nLeft -= valread;
     }
+    if(valread < 0) {
+        printf("\n Read Error \n");
+    }
 
-    // Send to the server
-    send(sock, method, strlen(method), 0);
-    debug_printf("[%s method sent]\n", method);
-    valread = read(sock, buffer, 1024);
+    fclose (fp);
 
     //printf("Downloading file %s\n", filename)
 };
@@ -77,11 +92,6 @@ void cmdList() {
 };
 
 void cmdGetSyncDir() {
-    char user_sync_dir_path[256];
-
-    // Define path to user sync_dir folder
-    sprintf(user_sync_dir_path, "%s/sync_dir_%s", getenv("HOME"), server_user);
-
     // Create user sync_dir if it doesn't exist
     makedir_if_not_exists(user_sync_dir_path);
 };
@@ -121,6 +131,9 @@ int main(int argc, char * argv[]) {
         return -1;
     }
     debug_printf("[Connection established. Socket number %d]\n", sock);
+
+    // Define path to user sync_dir folder
+    sprintf(user_sync_dir_path, "%s/sync_dir_%s", getenv("HOME"), server_user);
 
     // Send username to server
     write(sock, server_user, strlen(server_user));
