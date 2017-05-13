@@ -15,7 +15,6 @@ int main(int argc, char * argv[]) {
     int server_fd, new_socket, port;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
-    int read_size;
 
     // Check number of parameters
     if (argc != 2) {
@@ -54,7 +53,6 @@ int main(int argc, char * argv[]) {
     while((new_socket = accept(server_fd, (struct sockaddr * ) & address,
             (socklen_t * ) & addrlen))) {
         puts("Connection accepted");
-        //read_size = recv(new_socket, username, strlen(username), 0);
 
         if(pthread_create( &thread_id, NULL,  connection_handler, (void*) &new_socket) < 0) {
             perror("could not create thread");
@@ -134,6 +132,7 @@ void *connection_handler(void *socket_desc) {
                     }
                 }
                 write(sock, send_buffer, strlen(send_buffer));
+                write(sock, "", 1);
             } else if (n >= 0) { // empty directory
                 write(sock, "", 1);
             } else {
@@ -157,7 +156,7 @@ void *connection_handler(void *socket_desc) {
         };
 	}
 	if(read_size == 0) {
-		puts("Client disconnected");
+		printf("<~ %s disconnected\n", username);
 		fflush(stdout);
 	}
 	else if(read_size == -1) {

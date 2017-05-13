@@ -57,10 +57,11 @@ void cmdList() {
     char buffer[1024] = {0};
 
     send(sock, "LIST", 4, 0);
-    valread = read(sock, buffer, 1024);
-    printf("%s", buffer);
 
-    // TODO usar while para receber mais buffers de filenames caso haja
+    /* Receive data in chunks */
+    while((valread = read(sock, buffer, sizeof(buffer))) > 0){
+      printf("%s", buffer);
+    }
 };
 
 void cmdGetSyncDir() {
@@ -69,7 +70,7 @@ void cmdGetSyncDir() {
     // Define path to user sync_dir folder
     sprintf(user_sync_dir_path, "%s/sync_dir_%s", getenv("HOME"), server_user);
 
-    // Create folder if it doesn't exist
+    // Create user sync_dir if it doesn't exist
     makedir_if_not_exists(user_sync_dir_path);
 };
 
