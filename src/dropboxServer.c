@@ -8,20 +8,28 @@
 #include <dirent.h>
 #include <pthread.h>
 #include <sys/stat.h>
+#include <sys/queue.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxServer.h"
 
-// TODO usar structs!
-// TODO checar se os valores máximos das strings e os tipos (int) são suficientes?
-// TODO essas variaveis não podem ser globais, pois são compartilhadas por todas threads!
 __thread char username[MAXNAME];
 __thread char user_sync_dir_path[256];
 __thread int sock;
+
+// TODO mover isso pro .h?
+struct tailq_entry{
+    struct client client_entry;
+    TAILQ_ENTRY(tailq_entry) entries;
+};
+
+TAILQ_HEAD(, tailq_entry) my_tailq_head;
 
 int main(int argc, char * argv[]) {
     int server_fd, new_socket, port;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
+    struct tailq_entry *item;
+    struct tailq_entry *tmp_item;
 
     // Check number of parameters
     if (argc != 2) {
@@ -31,6 +39,9 @@ int main(int argc, char * argv[]) {
 
 	  port = atoi(argv[1]);
     printf("Server started on port %d\n", port);
+
+    // Initialize the tail queue
+    TAILQ_INIT(&my_tailq_head);
 
     // Creating socket file descriptor
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
@@ -156,6 +167,28 @@ void send_file(char * file) {
   }
 }
 
+void free_device(){
+  struct tailq_entry *item;
+  struct tailq_entry *tmp_item;
+
+  for (item = TAILQ_FIRST(&my_tailq_head); item != NULL; item = tmp_item){
+    if (strcmp(item->client_entry.userid, username) == 0) {
+      // Set current sock device free
+      if(item->client_entry.devices[0] == sock)
+        item->client_entry.devices[0] = -1;
+      else if(item->client_entry.devices[1] == sock)
+        item->client_entry.devices[1] = -1;
+
+      // Set logged_in to 0 if user is not connected anymore in any device.
+      if(item->client_entry.devices[0] == -1 && item->client_entry.devices[0] == -1)
+        item->client_entry.logged_in = 0;
+
+      break;
+    }
+    tmp_item = TAILQ_NEXT(item, entries);
+  }
+}
+
 // Handle connection for each client
 void *connection_handler(void *socket_desc) {
 	// Get the socket descriptor
@@ -163,10 +196,48 @@ void *connection_handler(void *socket_desc) {
 	int read_size;
 	char client_message[1024];
   char filename_string[256];
+  struct tailq_entry *item;
+  struct tailq_entry *tmp_item;
+
+  printf("SOCKET=%d\n", sock);
 
   // Receive username from client
   read_size = recv(sock, username, sizeof(username), 0);
   username[read_size] = '\0';
+
+  // Busca item
+  for (item = TAILQ_FIRST(&my_tailq_head); item != NULL; item = tmp_item){
+		if (strcmp(item->client_entry.userid, username) == 0) {
+			break;
+		}
+    tmp_item = TAILQ_NEXT(item, entries);
+	}
+
+  if(item != NULL){ // se ja estiver conectado em 2 devices, nao conecta. se estiver em um device, conecta no outro. se nao estiver em nenhum, cria o item na lista.
+    if(item->client_entry.devices[0] > 0 && item->client_entry.devices[1] > 0){
+      printf("Client already connected in two devices. Closing connection...\n");
+      free_device();
+      shutdown(sock, 2);
+      return 1;
+    }
+    int device_to_use = (item->client_entry.devices[0] < 0) ? 0 : 1;
+    item->client_entry.devices[device_to_use] = sock;
+  } else { // se nao encontrou, não está conectado, e portanto deve ser criado.
+    item = malloc(sizeof(*item));
+  	if (item == NULL) {
+  		perror("malloc failed");
+  		exit(EXIT_FAILURE);
+  	}
+    item->client_entry.devices[0] = sock;
+    item->client_entry.devices[1] = -1;
+    strcpy(item->client_entry.userid, username);
+    //TODO criar ou setar alguma coisa pra stuct de arquivos 'file_info'?
+    item->client_entry.logged_in = 1;
+
+    TAILQ_INSERT_TAIL(&my_tailq_head, item, entries);
+  }
+  // Send "OK" to confirm connection was accepted.
+  write(sock, "OK", 2);
 
   // Define path to user folder on server
   sprintf(user_sync_dir_path, "%s/server_sync_dir_%s", getenv("HOME"), username);
@@ -221,6 +292,7 @@ void *connection_handler(void *socket_desc) {
 	}
 	if(read_size == 0) {
 		printf("<~ %s disconnected\n", username);
+    free_device();
 		fflush(stdout);
 	}
 	else if(read_size == -1) {

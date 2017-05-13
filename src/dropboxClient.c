@@ -149,7 +149,9 @@ void cmdExit(){
 int main(int argc, char * argv[]) {
     char cmd[256];
     char filename[256];
+    char buffer[1024];
     char * token;
+    int valread;
 
     // Check number of parameteres
     if (argc < 4) {
@@ -166,13 +168,21 @@ int main(int argc, char * argv[]) {
     if (sock < 0) {
         return -1;
     }
-    debug_printf("[Connection established. Socket number %d]\n", sock);
 
     // Define path to user sync_dir folder
     sprintf(user_sync_dir_path, "%s/sync_dir_%s", getenv("HOME"), server_user);
 
     // Send username to server
     write(sock, server_user, strlen(server_user));
+
+    // Detect if connection was closed
+    valread = read(sock, buffer, sizeof(buffer));
+    if(valread == 0){
+      printf("%s already connected in two devices. Closing connection...\n", server_user);
+      return 0;
+    }
+
+    debug_printf("[Connection established]\n");
 
     printf("Welcome to Dropbox! - v 1.0\n");
     cmdMan();
@@ -184,7 +194,7 @@ int main(int argc, char * argv[]) {
         scanf("%s", cmd);
         if ((token = strtok(cmd, " \t")) != NULL) {
             if (strcmp(token, "exit") == 0) break;
-            else if (strcmp(token, "upload") == 0) {
+            else if (strcmp(token, "upload") ==    0) {
                 scanf("%s", filename);
                 // TODO copiar arquivo para pasta sync_dir. Mas e aí se ja tiver um outro arquivo com esse nome?
                 send_file(filename);

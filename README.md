@@ -15,4 +15,5 @@
 - [ ] verificar especificação
 - [ ] Confirmar se processos filhos estão sendo fechados. Problema com porta acontecendo ainda?
 - [ ] Teste e tratamento de erros
+- [ ] TODO checar se os valores máximos das strings e os tipos (int) são suficientes?
 - [ ] Segurança: e se o usuário passar um filename com "../" vai baixar algum arquivo indevido?
