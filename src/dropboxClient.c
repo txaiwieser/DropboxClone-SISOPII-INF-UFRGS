@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <stdlib.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -53,14 +54,19 @@ void cmdDownload(char *filename) {
 };
 
 void cmdList() {
-    int valread;
+    int valread, nLeft;
     char buffer[1024] = {0};
 
     send(sock, "LIST", 4, 0);
 
+    // Receive length
+    read(sock, &nLeft, sizeof(nLeft));
+    nLeft = ntohl(nLeft);
+
     /* Receive data in chunks */
-    while((valread = read(sock, buffer, sizeof(buffer))) > 0){
+    while(nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0){
       printf("%s", buffer);
+      nLeft -= valread;
     }
 };
 

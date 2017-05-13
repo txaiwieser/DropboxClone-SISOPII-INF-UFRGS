@@ -2,6 +2,7 @@
 #include <sys/socket.h>
 #include <stdlib.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <string.h>
 #include <sys/types.h>
 #include <dirent.h>
@@ -88,7 +89,6 @@ void *connection_handler(void *socket_desc) {
 	int sock = *(int*)socket_desc;
 	int read_size;
 	char client_message[1024];
-  char send_buffer[1024];
   char user_sync_dir_path[256];
   char filename_string[256];
 
@@ -109,34 +109,25 @@ void *connection_handler(void *socket_desc) {
         // LIST method
         if (!strncmp(client_message, "LIST", 4)) {
             struct dirent **namelist;
-            int i, n;
+            int i, n, nList = 0, nListConverted; // TODO is int enough for nList?
 
             printf("<~ %s requested LIST\n", username);
 
             // List files
             n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
-            if(n > 2){
-                for (i = 2; i < n; i++) { // Starting in i=2, it doesn't show '.' and '..'
-                    // TODO should we use send or sendto? need to check whats the difference between write and them...
-                    sprintf(filename_string, "%s\n", namelist[i]->d_name);
-                    // if buffer has enough space, insert complete filename
-                    if(strlen(send_buffer) + strlen(filename_string) < sizeof(send_buffer)){
-                      strcpy(send_buffer+strlen(send_buffer), filename_string);
-                      free(namelist[i]);
-                    } else {
-                      int space_available = sizeof(send_buffer) - strlen(send_buffer) -1; // TODO -1 ?
-                      strncpy(send_buffer+strlen(send_buffer), filename_string, space_available); // insere no buffer o numero de caracteres que ainda cabem
-                      write(sock, send_buffer, strlen(send_buffer));
-                      strcpy(send_buffer+strlen(send_buffer), filename_string+space_available);
-                      free(namelist[i]);
-                    }
+            if(n > 2){ // Starting in i=2, it doesn't show '.' and '..'
+                for (i = 2; i < n; i++) {
+                  nList += strlen(namelist[i]->d_name) + 1;
                 }
-                write(sock, send_buffer, strlen(send_buffer));
-                write(sock, "", 1);
-            } else if (n >= 0) { // empty directory
-                write(sock, "", 1);
+                // Send length
+                nListConverted = htonl(nList);
+                write(sock, &nListConverted, sizeof(nListConverted));
+                for (i = 2; i < n; i++) {
+                    sprintf(filename_string, "%s\n", namelist[i]->d_name);
+                    write(sock, filename_string, strlen(filename_string));
+                    free(namelist[i]);
+                }
             } else {
-                write(sock, "", 1);
                 perror("Couldn't open the directory");
             }
             free(namelist);
