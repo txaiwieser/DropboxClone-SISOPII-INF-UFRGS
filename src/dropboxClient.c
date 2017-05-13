@@ -15,7 +15,7 @@ char server_host[256];
 int server_port = 0, sock = 0;
 char server_user[MAXNAME];
 
-void cmdUpload(char *filename) {
+void send_file(char *file) {
     // TODO verificar se foi passado um nome de arquivo válido (nao vazio? existente?)
     // TODO fazer funcionar se houver espaços a mais antes do filename (e pode ser que haja depois também...)
     int valread;
@@ -23,7 +23,7 @@ void cmdUpload(char *filename) {
     char method[160];
 
     // Concatenate strings to get method = "UPLOAD filename"
-    sprintf(method, "UPLOAD %s", filename);
+    sprintf(method, "UPLOAD %s", file);
 
     // Call to the server
     send(sock, method, strlen(method), 0);
@@ -31,10 +31,9 @@ void cmdUpload(char *filename) {
     valread = read(sock, buffer, 1024);
 
     //printf("Uploading file %s\n", filename)
-    // TODO upload file using send_file()
 };
 
-void cmdDownload(char *filename) {
+void get_file(char *file) {
     // TODO verificar se foi passado um nome de arquivo válido (nao vazio? existente?)
     // TODO fazer funcionar se houver espaços a mais antes do filename (e pode ser que haja depois também...)
     int valread;
@@ -42,7 +41,7 @@ void cmdDownload(char *filename) {
     char method[160];
 
     // Concatenate strings to get method = "DOWNLOAD filename"
-    sprintf(method, "DOWNLOAD %s", filename);
+    sprintf(method, "DOWNLOAD %s", file);
 
     // Send to the server
     send(sock, method, strlen(method), 0);
@@ -50,7 +49,6 @@ void cmdDownload(char *filename) {
     valread = read(sock, buffer, 1024);
 
     //printf("Downloading file %s\n", filename)
-    // TODO download file using get_file()
 };
 
 void cmdList() {
@@ -132,12 +130,12 @@ int main(int argc, char * argv[]) {
             if (strcmp(token, "exit") == 0) break;
             else if (strcmp(token, "upload") == 0) {
               strcpy(filename, cmd+7);
-              cmdUpload(filename);
+              send_file(filename);
             }
             else if (strcmp(token, "download") == 0) {
                 strcpy(filename, cmd+9);
                 printf("filenamee %s\n", filename);
-                cmdDownload(filename);
+                get_file(filename);
             }
             else if (strcmp(token, "list") == 0) cmdList();
             else if (strcmp(token, "get_sync_dir") == 0) cmdGetSyncDir();
@@ -181,14 +179,6 @@ int connect_server(char * host, int port) {
 }
 
 void sync_client() {
-
-}
-
-void send_file(char * file) {
-
-}
-
-void get_file(char * file) {
 
 }
 
