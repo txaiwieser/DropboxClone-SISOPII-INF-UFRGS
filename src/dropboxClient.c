@@ -23,10 +23,9 @@ char user_sync_dir_path[256];
 void send_file(char *file) {
     int valread, length_converted; // TODO is int enough for length_converted?
     char method[160];
-    char file_path[256];
     struct stat st;
 
-    stat(file_path, &st);
+    stat(file, &st);
 
     /* Open the file that we wish to transfer */
     FILE *fp = fopen(file,"rb");
@@ -35,6 +34,7 @@ void send_file(char *file) {
     } else {
 
       // Concatenate strings to get method = "UPLOAD filename"
+      // TODO remover o path, deixar só o nome do arquivo
       sprintf(method, "UPLOAD %s", file);
 
       // Call to the server
