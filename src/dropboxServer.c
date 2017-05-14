@@ -160,6 +160,35 @@ void send_file(char * file) {
   }
 }
 
+void list_files(){
+  char filename_string[256];
+  struct dirent **namelist;
+  int i, n, nList = 0, nListConverted; // REVIEW Is int enough for nList and nListConverted?
+
+  printf("<~ %s requested LIST\n", username);
+
+  // List files
+  n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
+  if(n > 2){ // Starting in i=2, it doesn't show '.' and '..'
+      for (i = 2; i < n; i++) {
+        nList += strlen(namelist[i]->d_name) + 1;
+      }
+      // Send length
+      nListConverted = htonl(nList);
+      write(sock, &nListConverted, sizeof(nListConverted));
+      for (i = 2; i < n; i++) {
+          sprintf(filename_string, "%s\n", namelist[i]->d_name);
+          write(sock, filename_string, strlen(filename_string));
+          free(namelist[i]);
+      }
+  } else {
+      perror("Couldn't open the directory");
+      nListConverted = htonl(0);
+      write(sock, &nListConverted, sizeof(nListConverted));
+  }
+  free(namelist);
+}
+
 void free_device(){
   struct tailq_entry *item;
   struct tailq_entry *tmp_item;
@@ -188,7 +217,6 @@ void *connection_handler(void *socket_desc) {
 	sock = *(int*)socket_desc;
 	int read_size;
 	char client_message[1024];
-  char filename_string[256];
   struct tailq_entry *item;
   struct tailq_entry *tmp_item;
 
@@ -239,53 +267,24 @@ void *connection_handler(void *socket_desc) {
 	while( (read_size = recv(sock, client_message, sizeof(client_message), 0)) > 0 )  {
 		// end of string marker
 		client_message[read_size] = '\0';
-        // TODO move list to another function?
-        // LIST method
+
         if (!strncmp(client_message, "LIST", 4)) {
-            struct dirent **namelist;
-            int i, n, nList = 0, nListConverted; // REVIEW Is int enough for nList?
-
-            printf("<~ %s requested LIST\n", username);
-
-            // List files
-            n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
-            if(n > 2){ // Starting in i=2, it doesn't show '.' and '..'
-                for (i = 2; i < n; i++) {
-                  nList += strlen(namelist[i]->d_name) + 1;
-                }
-                // Send length
-                nListConverted = htonl(nList);
-                write(sock, &nListConverted, sizeof(nListConverted));
-                for (i = 2; i < n; i++) {
-                    sprintf(filename_string, "%s\n", namelist[i]->d_name);
-                    write(sock, filename_string, strlen(filename_string));
-                    free(namelist[i]);
-                }
-            } else {
-                perror("Couldn't open the directory");
-                nListConverted = htonl(0);
-                write(sock, &nListConverted, sizeof(nListConverted));
-            }
-            free(namelist);
-
-    		printf("~> List of files sent to %s\n", username);
-
+            list_files();
+    		    printf("~> List of files sent to %s\n", username);
         } else if (!strncmp(client_message, "DOWNLOAD", 8)) {
-
             printf("Request method: DOWNLOAD\n");
             send_file(client_message + 9);
-
         } else if (!strncmp(client_message, "UPLOAD", 6)) {
             printf("Request method: UPLOAD\n");
             receive_file(client_message + 7);
         };
 	}
+
 	if(read_size == 0) {
 		printf("<~ %s disconnected\n", username);
     free_device();
 		fflush(stdout);
-	}
-	else if(read_size == -1) {
+	}	else if(read_size == -1) {
 		perror("recv failed");
 	}
 
