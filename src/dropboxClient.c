@@ -45,13 +45,13 @@ void send_file(char *file) {
           write(sock, &length_converted, sizeof(length_converted));
 
           /* Read data from file and send it */
-          while(1) {
+          while (1) {
               /* First read file in chunks of 1024 bytes */
               unsigned char buff[1024] = {0};
               int nread = fread(buff, 1, sizeof(buff), fp);
 
               /* If read was success, send data. */
-              if(nread > 0) {
+              if (nread > 0) {
                   write(sock, buff, nread);
               }
 
@@ -145,7 +145,7 @@ void cmdMan() {
 };
 
 void cmdExit() {
-  close_connection();
+    close_connection();
 }
 
 int main(int argc, char * argv[]) {
@@ -238,7 +238,7 @@ int connect_server(char * host, int port) {
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
-    serv_addr.sin_addr = *((struct in_addr *)server->h_addr);
+    serv_addr.sin_addr = *((struct in_addr *) server->h_addr);
     bzero(&(serv_addr.sin_zero), 8);
 
     if (connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
