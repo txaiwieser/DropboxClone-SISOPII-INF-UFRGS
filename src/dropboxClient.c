@@ -12,17 +12,16 @@
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxClient.h"
 
-// TODO checar se os valores máximos das strings e os tipos (int) são suficientes?
-// TODO do these variables need to be global?
+// REVIEW Check if strings sizes and types used (mostly int) are enough
+// REVIEW do these variables need to be global?
 char server_host[256];
 int server_port = 0, sock = 0;
 char server_user[MAXNAME];
 char user_sync_dir_path[256];
 
-// TODO tratar erros nessa funcao e nas similares, do cliente e servidor. Se há um problem ao abrir arquivo, nao deve prosseguir.
-// TODO colocar mensagem de debug dizendo que arquivo foi enviado ou nao, etc, nessa funcao e nas similares
+// TODO Handle errors on send_file, get_file, receive_file (on server), send_file (on server). If file can't be opened, it should return an error and exit. Also, display success messages.
 void send_file(char *file) {
-    int valread, length_converted; // TODO is int enough for length_converted?
+    int length_converted; // REVIEW Is int enough for length_converted?
     char method[160];
     struct stat st;
     int stat_result = stat(file, &st);
@@ -86,6 +85,8 @@ void get_file(char *file) {
     // Send to the server
     send(sock, method, strlen(method), 0);
     debug_printf("[%s method sent]\n", method);
+
+    // TODO If file doesn't exist on server, return an error message.
 
     /* Create file where data will be stored */
     FILE *fp;
@@ -190,18 +191,17 @@ int main(int argc, char * argv[]) {
     // Handle user input
     while (1) {
         printf("Dropbox> ");
-        // TODO tratar caso usuário apenas dê um enter
+        // TODO Ajustar se usuário tecla enter sem inserir nada antes
         scanf("%s", cmd);
         if ((token = strtok(cmd, " \t")) != NULL) {
             if (strcmp(token, "exit") == 0) break;
             else if (strcmp(token, "upload") ==    0) {
                 scanf("%s", filename);
-                // TODO copiar arquivo para pasta sync_dir. Mas e aí se ja tiver um outro arquivo com esse nome?
+                // TODO Copy file to local sync_dir. (What to do if there's already a file with the same name?)
                 send_file(filename);
             }
             else if (strcmp(token, "download") == 0) {
                 scanf("%s", filename);
-                // TODO check if file exists
                 if((dir_exists(user_sync_dir_path) == 0)){
                   get_file(filename);
                 } else {
@@ -250,7 +250,7 @@ int connect_server(char * host, int port) {
 }
 
 void sync_client() {
-  // TODO sync_client
+  // TODO sync_client()
 }
 
 void close_connection() {

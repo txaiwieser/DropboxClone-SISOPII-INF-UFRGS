@@ -1,6 +1,6 @@
 #include "dropboxUtil.h"
 
-#define MAXFILES 500 // TODO quanto?
+#define MAXFILES 500 // REVIEW Quando deve ser? Pedir pro monitor
 
 typedef struct file_info {
   char name[MAXNAME]; // refere-se ao nome do arquivo
@@ -15,6 +15,11 @@ typedef struct client {
   FILE_INFO_t file_info[MAXFILES];  // metadados de cada arquivo que o cliente possui no servidor
   int logged_in;  // cliente está logado ou não
 } CLIENT_t;
+
+struct tailq_entry{
+    struct client client_entry;
+    TAILQ_ENTRY(tailq_entry) entries;
+};
 
 void sync_server();
 

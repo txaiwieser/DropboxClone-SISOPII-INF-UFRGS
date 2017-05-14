@@ -1,4 +1,4 @@
-#define MAXNAME 50 // TODO quanto?
+#define MAXNAME 50 // REVIEW Quanto deve ser? Pedir pro monitor
 
 #define DEBUG 1
 

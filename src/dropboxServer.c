@@ -5,10 +5,11 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include <sys/types.h>
-#include <dirent.h>
-#include <pthread.h>
 #include <sys/stat.h>
 #include <sys/queue.h>
+#include <dirent.h>
+#include <pthread.h>
+#include <unistd.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxServer.h"
 
@@ -16,20 +17,12 @@ __thread char username[MAXNAME];
 __thread char user_sync_dir_path[256];
 __thread int sock;
 
-// TODO mover isso pro .h?
-struct tailq_entry{
-    struct client client_entry;
-    TAILQ_ENTRY(tailq_entry) entries;
-};
-
 TAILQ_HEAD(, tailq_entry) my_tailq_head;
 
 int main(int argc, char * argv[]) {
     int server_fd, new_socket, port;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
-    struct tailq_entry *item;
-    struct tailq_entry *tmp_item;
 
     // Check number of parameters
     if (argc != 2) {
@@ -59,7 +52,7 @@ int main(int argc, char * argv[]) {
         perror("bind failed");
         exit(EXIT_FAILURE);
     }
-    if (listen(server_fd, 3) < 0) { // TODO checar se esse valor 3 é a melhor opção
+    if (listen(server_fd, 3) < 0) { // REVIEW Is 3 the best value for backlog (2nd parameter)?
         perror("listen");
         exit(EXIT_FAILURE);
     }
@@ -89,7 +82,7 @@ int main(int argc, char * argv[]) {
 }
 
 void sync_server() {
-  // TODO sync_server
+  // TODO sync_server()
 }
 
 void receive_file(char * file) {
@@ -124,10 +117,10 @@ void receive_file(char * file) {
 void send_file(char * file) {
   char file_path[256];
   sprintf(file_path, "%s/%s", user_sync_dir_path, file);
-  int length_converted; // TODO is int enough?
+  int length_converted, stat_result; // REVIEW is int enough for length_converted?
   struct stat st;
-  int stat_result = stat(file_path, &st);
 
+  stat_result = stat(file_path, &st);
   if( stat_result == 0 ) { // If file exists
     /* Open the file that we wish to transfer */
     FILE *fp = fopen(file_path,"rb");
@@ -199,8 +192,6 @@ void *connection_handler(void *socket_desc) {
   struct tailq_entry *item;
   struct tailq_entry *tmp_item;
 
-  printf("SOCKET=%d\n", sock);
-
   // Receive username from client
   read_size = recv(sock, username, sizeof(username), 0);
   username[read_size] = '\0';
@@ -218,7 +209,7 @@ void *connection_handler(void *socket_desc) {
       printf("Client already connected in two devices. Closing connection...\n");
       free_device();
       shutdown(sock, 2);
-      return 1;
+      exit(0);
     }
     int device_to_use = (item->client_entry.devices[0] < 0) ? 0 : 1;
     item->client_entry.devices[device_to_use] = sock;
@@ -231,9 +222,8 @@ void *connection_handler(void *socket_desc) {
     item->client_entry.devices[0] = sock;
     item->client_entry.devices[1] = -1;
     strcpy(item->client_entry.userid, username);
-    //TODO criar ou setar alguma coisa pra stuct de arquivos 'file_info'?
     item->client_entry.logged_in = 1;
-
+    // TODO Insert data into struct file_info
     TAILQ_INSERT_TAIL(&my_tailq_head, item, entries);
   }
   // Send "OK" to confirm connection was accepted.
@@ -249,11 +239,11 @@ void *connection_handler(void *socket_desc) {
 	while( (read_size = recv(sock, client_message, sizeof(client_message), 0)) > 0 )  {
 		// end of string marker
 		client_message[read_size] = '\0';
-
+        // TODO move list to another function?
         // LIST method
         if (!strncmp(client_message, "LIST", 4)) {
             struct dirent **namelist;
-            int i, n, nList = 0, nListConverted; // TODO is int enough for nList?
+            int i, n, nList = 0, nListConverted; // REVIEW Is int enough for nList?
 
             printf("<~ %s requested LIST\n", username);
 
@@ -299,5 +289,5 @@ void *connection_handler(void *socket_desc) {
 		perror("recv failed");
 	}
 
-	return 0;
+  return NULL;
 }
