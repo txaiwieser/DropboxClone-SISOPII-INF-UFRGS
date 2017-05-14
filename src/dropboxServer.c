@@ -224,7 +224,7 @@ void *connection_handler(void *socket_desc) {
   read_size = recv(sock, username, sizeof(username), 0);
   username[read_size] = '\0';
 
-  // Busca item
+  // Search for client in client list
   for (item = TAILQ_FIRST(&my_tailq_head); item != NULL; item = tmp_item){
 		if (strcmp(item->client_entry.userid, username) == 0) {
 			break;
@@ -232,28 +232,36 @@ void *connection_handler(void *socket_desc) {
     tmp_item = TAILQ_NEXT(item, entries);
 	}
 
-  if(item != NULL){ // se ja estiver conectado em 2 devices, nao conecta. se estiver em um device, conecta no outro. se nao estiver em nenhum, cria o item na lista.
+  // If it's found...
+  if(item != NULL){
+    // and is already connected in two devices, return an error message and close connection.
     if(item->client_entry.devices[0] > 0 && item->client_entry.devices[1] > 0){
       printf("Client already connected in two devices. Closing connection...\n");
-      free_device();
+      free_device(); // FIXME ???? Is it right? seems to be a mistake...
       shutdown(sock, 2);
       exit(0);
     }
+    // If it's connected only in one device, connect the second device.
     int device_to_use = (item->client_entry.devices[0] < 0) ? 0 : 1;
     item->client_entry.devices[device_to_use] = sock;
-  } else { // se nao encontrou, não está conectado, e portanto deve ser criado.
+  }
+  // If it's not found, it's not connected, so it need to be added to the client list.
+  else {
     item = malloc(sizeof(*item));
   	if (item == NULL) {
   		perror("malloc failed");
   		exit(EXIT_FAILURE);
   	}
+
     item->client_entry.devices[0] = sock;
     item->client_entry.devices[1] = -1;
     strcpy(item->client_entry.userid, username);
     item->client_entry.logged_in = 1;
+
     // TODO Insert data into struct file_info
     TAILQ_INSERT_TAIL(&my_tailq_head, item, entries);
   }
+
   // Send "OK" to confirm connection was accepted.
   write(sock, "OK", 2);
 
