@@ -20,3 +20,9 @@ void makedir_if_not_exists(const char* path){
       mkdir(path, 0700);
   }
 }
+
+// return 0 if exists, -1 otherwise
+int dir_exists(const char* path){
+  struct stat st = {0};
+  return stat(path, &st);
+}

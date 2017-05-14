@@ -200,15 +200,20 @@ int main(int argc, char * argv[]) {
                 send_file(filename);
             }
             else if (strcmp(token, "download") == 0) {
-                // TODO não permitir download se o sync_dir do usuario nao existir. (Mostrar msg dizendo que deve dar um get_sync_dir)
                 scanf("%s", filename);
-                get_file(filename);
+                // TODO check if file exist
+                if((dir_exists(user_sync_dir_path) == 0)){
+                  get_file(filename);
+                } else {
+                  printf("Run get_sync_dir first.\n");
+                }
             }
             else if (strcmp(token, "list") == 0) cmdList();
             else if (strcmp(token, "get_sync_dir") == 0) cmdGetSyncDir();
             else if (strcmp(token, "help") == 0) cmdMan();
             else printf("Invalid command! Type 'help' to see the available commands\n");
-        } else { printf("aquii"); }
+        } else {
+        }
     }
 
     return 0;
