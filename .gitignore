@@ -138,3 +138,5 @@ xcuserdata/
 ## Custom
 bin/*
 !bin/.gitkeep
+.floo
+.flooignore
