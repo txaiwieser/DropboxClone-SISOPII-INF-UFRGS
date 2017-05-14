@@ -135,5 +135,6 @@ xcuserdata/
 # End of https://www.gitignore.io/api/c,xcode,macos,windows
 
 
-## Custom 
+## Custom
 bin/*
+!bin/.gitkeep

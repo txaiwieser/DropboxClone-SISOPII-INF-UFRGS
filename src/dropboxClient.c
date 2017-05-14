@@ -201,7 +201,7 @@ int main(int argc, char * argv[]) {
             }
             else if (strcmp(token, "download") == 0) {
                 scanf("%s", filename);
-                // TODO check if file exist
+                // TODO check if file exists
                 if((dir_exists(user_sync_dir_path) == 0)){
                   get_file(filename);
                 } else {
@@ -212,7 +212,6 @@ int main(int argc, char * argv[]) {
             else if (strcmp(token, "get_sync_dir") == 0) cmdGetSyncDir();
             else if (strcmp(token, "help") == 0) cmdMan();
             else printf("Invalid command! Type 'help' to see the available commands\n");
-        } else {
         }
     }
 
