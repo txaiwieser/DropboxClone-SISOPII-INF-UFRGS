@@ -28,47 +28,48 @@ void send_file(char *file) {
 
     /* Open the file that we wish to transfer */
 
-    if( stat_result == 0 ) {
+    if (stat_result == 0) {
       FILE *fp = fopen(file,"rb");
-      if(fp == NULL){
+      if (fp == NULL) {
           printf("File open error");
 
-      // Concatenate strings to get method = "UPLOAD filename"
-      sprintf(method, "UPLOAD %s", basename(file));
+          // Concatenate strings to get method = "UPLOAD filename"
+          sprintf(method, "UPLOAD %s", basename(file));
 
-      // Call to the server
-      send(sock, method, strlen(method), 0);
-      debug_printf("[%s method sent]\n", method);
+          // Call to the server
+          send(sock, method, strlen(method), 0);
+          debug_printf("[%s method sent]\n", method);
 
-      /* Send file size to server */
-      length_converted = htonl(st.st_size);
-      write(sock, &length_converted, sizeof(length_converted));
+          /* Send file size to server */
+          length_converted = htonl(st.st_size);
+          write(sock, &length_converted, sizeof(length_converted));
 
-      /* Read data from file and send it */
-      while(1){
-          /* First read file in chunks of 1024 bytes */
-          unsigned char buff[1024] = {0};
-          int nread = fread(buff, 1, sizeof(buff), fp);
+          /* Read data from file and send it */
+          while(1) {
+              /* First read file in chunks of 1024 bytes */
+              unsigned char buff[1024] = {0};
+              int nread = fread(buff, 1, sizeof(buff), fp);
 
-          /* If read was success, send data. */
-          if(nread > 0) {
-              write(sock, buff, nread);
+              /* If read was success, send data. */
+              if(nread > 0) {
+                  write(sock, buff, nread);
+              }
+
+              /* Either there was error, or reached end of file */
+              if (nread < sizeof(buff)) {
+                  /*if (feof(fp))
+                      debug_printf("End of file\n"); */
+                  if (ferror(fp)) {
+                      printf("Error reading\n");
+                  }
+                  break;
+              }
           }
-
-          /* Either there was error, or reached end of file */
-          if (nread < sizeof(buff)) {
-              /*if (feof(fp))
-                  debug_printf("End of file\n"); */
-              if (ferror(fp))
-                  printf("Error reading\n");
-              break;
-          }
-        }
+      }
+      fclose(fp);
+    } else {
+      printf("File doesn't exist! Pass a valid filename.\n");
     }
-    fclose(fp);
-  } else {
-    printf("File doesn't exist! Pass a valid filename.\n");
-  }
 };
 
 void get_file(char *file) {
@@ -91,7 +92,7 @@ void get_file(char *file) {
     /* Create file where data will be stored */
     FILE *fp;
     fp = fopen(file_path, "ab");
-    if(NULL == fp){
+    if (NULL == fp) {
         printf("Error opening file");
     } else {
       // Receive length
@@ -99,11 +100,11 @@ void get_file(char *file) {
       nLeft = ntohl(nLeft);
 
       /* Receive data in chunks */
-      while(nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0){
+      while (nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0) {
         fwrite(buffer, 1, valread, fp);
         nLeft -= valread;
       }
-      if(valread < 0) {
+      if (valread < 0) {
           printf("\n Read Error \n");
       }
     }
@@ -121,7 +122,7 @@ void cmdList() {
     nLeft = ntohl(nLeft);
 
     /* Receive data in chunks */
-    while(nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0){
+    while (nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0) {
       buffer[valread] = '\0';
       printf("%s", buffer);
       nLeft -= valread;
@@ -143,7 +144,7 @@ void cmdMan() {
     printf("exit\n\n");
 };
 
-void cmdExit(){
+void cmdExit() {
   close_connection();
 }
 
@@ -178,7 +179,7 @@ int main(int argc, char * argv[]) {
 
     // Detect if connection was closed
     valread = read(sock, buffer, sizeof(buffer));
-    if(valread == 0){
+    if (valread == 0) {
       printf("%s already connected in two devices. Closing connection...\n", server_user);
       return 0;
     }
@@ -195,14 +196,14 @@ int main(int argc, char * argv[]) {
         scanf("%s", cmd);
         if ((token = strtok(cmd, " \t")) != NULL) {
             if (strcmp(token, "exit") == 0) break;
-            else if (strcmp(token, "upload") ==    0) {
+            else if (strcmp(token, "upload") == 0) {
                 scanf("%s", filename);
                 // TODO Copy file to local sync_dir. (What to do if there's already a file with the same name?)
                 send_file(filename);
             }
             else if (strcmp(token, "download") == 0) {
                 scanf("%s", filename);
-                if((dir_exists(user_sync_dir_path) == 0)){
+                if ((dir_exists(user_sync_dir_path) == 0)) {
                   get_file(filename);
                 } else {
                   printf("Run get_sync_dir first.\n");
@@ -214,7 +215,6 @@ int main(int argc, char * argv[]) {
             else printf("Invalid command! Type 'help' to see the available commands\n");
         }
     }
-
     return 0;
 }
 
@@ -234,14 +234,14 @@ int connect_server(char * host, int port) {
         return -1;
     }
 
-    memset( & serv_addr, '0', sizeof(serv_addr));
+    memset(&serv_addr, '0', sizeof(serv_addr));
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
     serv_addr.sin_addr = *((struct in_addr *)server->h_addr);
     bzero(&(serv_addr.sin_zero), 8);
 
-    if (connect(sock, (struct sockaddr * ) & serv_addr, sizeof(serv_addr)) < 0) {
+    if (connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
         printf("\nConnection Failed. \n");
         return -1;
     }

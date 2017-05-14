@@ -47,8 +47,7 @@ int main(int argc, char * argv[]) {
     address.sin_port = htons(port);
 
     // Forcefully attaching socket to the port
-    if (bind(server_fd, (struct sockaddr * ) & address,
-            sizeof(address)) < 0) {
+    if (bind(server_fd, (struct sockaddr *) &address, sizeof(address)) < 0) {
         perror("bind failed");
         exit(EXIT_FAILURE);
     }
@@ -61,16 +60,15 @@ int main(int argc, char * argv[]) {
     puts("Waiting for incoming connections...");
     addrlen = sizeof(struct sockaddr_in);
     pthread_t thread_id;
-    while((new_socket = accept(server_fd, (struct sockaddr * ) & address,
-            (socklen_t * ) & addrlen))) {
+    while ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen))) {
         puts("Connection accepted");
 
-        if(pthread_create( &thread_id, NULL,  connection_handler, (void*) &new_socket) < 0) {
+        if (pthread_create(&thread_id, NULL, connection_handler, (void *) &new_socket) < 0) {
             perror("could not create thread");
             return 1;
         }
         // Now join the thread, so that we dont terminate before the thread
-        // pthread_join( thread_id, NULL);
+        // pthread_join(thread_id, NULL);
         puts("Handler assigned");
     }
     if (new_socket < 0) {
@@ -85,7 +83,7 @@ void sync_server() {
   // TODO sync_server()
 }
 
-void receive_file(char * file) {
+void receive_file(char *file) {
   int valread, nLeft;
   char buffer[1024] = {0};
   char file_path[256];
@@ -95,7 +93,7 @@ void receive_file(char * file) {
   /* Create file where data will be stored */
   FILE *fp;
   fp = fopen(file_path, "ab");
-  if(NULL == fp){
+  if (NULL == fp) {
       printf("Error opening file");
   } else {
     // Receive length
@@ -103,15 +101,15 @@ void receive_file(char * file) {
     nLeft = ntohl(nLeft);
 
     /* Receive data in chunks */
-    while(nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0){
+    while (nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0) {
       fwrite(buffer, 1, valread, fp);
       nLeft -= valread;
     }
-    if(valread < 0) {
+    if (valread < 0) {
         printf("\n Read Error \n");
     }
   }
-  fclose (fp);
+  fclose(fp);
 }
 
 void send_file(char * file) {
@@ -121,10 +119,10 @@ void send_file(char * file) {
   struct stat st;
 
   stat_result = stat(file_path, &st);
-  if( stat_result == 0 ) { // If file exists
+  if (stat_result == 0) { // If file exists
     /* Open the file that we wish to transfer */
     FILE *fp = fopen(file_path,"rb");
-    if(fp == NULL){
+    if (fp == NULL) {
         length_converted = htonl(0);
         write(sock, &length_converted, sizeof(length_converted));
         printf("File open error");
@@ -134,13 +132,13 @@ void send_file(char * file) {
       write(sock, &length_converted, sizeof(length_converted));
 
       /* Read data from file and send it */
-      while(1){
+      while (1) {
           /* First read file in chunks of 1024 bytes */
           unsigned char buff[1024] = {0};
           int nread = fread(buff, 1, sizeof(buff), fp);
 
           /* If read was success, send data. */
-          if(nread > 0) {
+          if (nread > 0) {
               write(sock, buff, nread);
           }
 
@@ -148,8 +146,9 @@ void send_file(char * file) {
           if (nread < sizeof(buff)) {
               /*if (feof(fp))
                   debug_printf("End of file\n"); */
-              if (ferror(fp))
+              if (ferror(fp)) {
                   printf("Error reading\n");
+              }
               break;
           }
         }
@@ -169,7 +168,7 @@ void list_files(){
 
   // List files
   n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
-  if(n > 2){ // Starting in i=2, it doesn't show '.' and '..'
+  if (n > 2) { // Starting in i=2, it doesn't show '.' and '..'
       for (i = 2; i < n; i++) {
         nList += strlen(namelist[i]->d_name) + 1;
       }
@@ -196,14 +195,16 @@ void free_device(){
   for (item = TAILQ_FIRST(&my_tailq_head); item != NULL; item = tmp_item){
     if (strcmp(item->client_entry.userid, username) == 0) {
       // Set current sock device free
-      if(item->client_entry.devices[0] == sock)
+      if (item->client_entry.devices[0] == sock) {
         item->client_entry.devices[0] = -1;
-      else if(item->client_entry.devices[1] == sock)
+      } else if (item->client_entry.devices[1] == sock) {
         item->client_entry.devices[1] = -1;
+      }
 
       // Set logged_in to 0 if user is not connected anymore in any device.
-      if(item->client_entry.devices[0] == -1 && item->client_entry.devices[0] == -1)
+      if (item->client_entry.devices[0] == -1 && item->client_entry.devices[0] == -1){
         item->client_entry.logged_in = 0;
+      }
 
       break;
     }
@@ -214,7 +215,7 @@ void free_device(){
 // Handle connection for each client
 void *connection_handler(void *socket_desc) {
 	// Get the socket descriptor
-	sock = *(int*)socket_desc;
+	sock = *(int *) socket_desc;
 	int read_size;
 	char client_message[1024];
   struct tailq_entry *item;
@@ -225,7 +226,7 @@ void *connection_handler(void *socket_desc) {
   username[read_size] = '\0';
 
   // Search for client in client list
-  for (item = TAILQ_FIRST(&my_tailq_head); item != NULL; item = tmp_item){
+  for (item = TAILQ_FIRST(&my_tailq_head); item != NULL; item = tmp_item) {
 		if (strcmp(item->client_entry.userid, username) == 0) {
 			break;
 		}
@@ -233,9 +234,9 @@ void *connection_handler(void *socket_desc) {
 	}
 
   // If it's found...
-  if(item != NULL){
+  if (item != NULL) {
     // and is already connected in two devices, return an error message and close connection.
-    if(item->client_entry.devices[0] > 0 && item->client_entry.devices[1] > 0){
+    if (item->client_entry.devices[0] > 0 && item->client_entry.devices[1] > 0) {
       printf("Client already connected in two devices. Closing connection...\n");
       shutdown(sock, 2);
       exit(0);
@@ -271,7 +272,7 @@ void *connection_handler(void *socket_desc) {
   makedir_if_not_exists(user_sync_dir_path);
 
 	// Receive a message from client
-	while( (read_size = recv(sock, client_message, sizeof(client_message), 0)) > 0 )  {
+	while ((read_size = recv(sock, client_message, sizeof(client_message), 0)) > 0 ) {
 		// end of string marker
 		client_message[read_size] = '\0';
 
@@ -287,7 +288,7 @@ void *connection_handler(void *socket_desc) {
         };
 	}
 
-	if(read_size == 0) {
+	if (read_size == 0) {
 		printf("<~ %s disconnected\n", username);
     free_device();
 		fflush(stdout);
