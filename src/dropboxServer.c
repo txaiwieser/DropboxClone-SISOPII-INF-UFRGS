@@ -237,7 +237,6 @@ void *connection_handler(void *socket_desc) {
     // and is already connected in two devices, return an error message and close connection.
     if(item->client_entry.devices[0] > 0 && item->client_entry.devices[1] > 0){
       printf("Client already connected in two devices. Closing connection...\n");
-      free_device(); // FIXME ???? Is it right? seems to be a mistake...
       shutdown(sock, 2);
       exit(0);
     }
