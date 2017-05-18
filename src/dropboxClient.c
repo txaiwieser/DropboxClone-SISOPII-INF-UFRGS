@@ -25,7 +25,7 @@ char user_sync_dir_path[256];
 
 // TODO Handle errors on send_file, get_file, receive_file (on server), send_file (on server). If file can't be opened, it should return an error and exit. Also, display success messages.
 void send_file(char *file) {
-    int length_converted; // REVIEW Is int enough for length_converted?
+    uint32_t length_converted;
     char method[160];
     struct stat st;
     int stat_result = stat(file, &st);
@@ -46,6 +46,7 @@ void send_file(char *file) {
           /* Send file size to server */
           length_converted = htonl(st.st_size);
           write(sock, &length_converted, sizeof(length_converted));
+          printf("length_converted enviado=%ld size enviado=%lld\n", (unsigned long)length_converted, st.st_size);
 
           /* Read data from file and send it */
           while (1) {
@@ -76,7 +77,8 @@ void send_file(char *file) {
 };
 
 void get_file(char *file) {
-    int valread, nLeft;
+    int valread;
+    uint32_t nLeft;
     char buffer[1024] = {0};
     char method[160];
     char file_path[256];
@@ -94,7 +96,7 @@ void get_file(char *file) {
 
     /* Create file where data will be stored */
     FILE *fp;
-    fp = fopen(file_path, "ab");
+    fp = fopen(file_path, "wb");
     if (NULL == fp) {
         printf("Error opening file");
     } else {
@@ -115,7 +117,8 @@ void get_file(char *file) {
 };
 
 void cmdList() {
-    int valread, nLeft;
+    int valread;
+    uint32_t nLeft;
     char buffer[1024] = {0};
 
     send(sock, "LIST", 4, 0);
@@ -162,7 +165,6 @@ void* sync_daemon(void* unused) {
   int fd;
   int wd;
   char buffer[BUF_LEN];
-  char filepath[MAXNAME];
 
   fd = inotify_init();
 
@@ -175,6 +177,8 @@ void* sync_daemon(void* unused) {
 
   while (1) {
     int i = 0;
+    char filepath[MAXNAME];
+
     length = read( fd, buffer, BUF_LEN );
 
     if ( length < 0 ) {

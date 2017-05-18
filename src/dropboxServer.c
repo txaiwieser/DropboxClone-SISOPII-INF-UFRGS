@@ -84,7 +84,8 @@ void sync_server() {
 }
 
 void receive_file(char *file) {
-  int valread, nLeft;
+  int valread;
+  uint32_t nLeft;
   char buffer[1024] = {0};
   char file_path[256];
 
@@ -92,30 +93,36 @@ void receive_file(char *file) {
 
   /* Create file where data will be stored */
   FILE *fp;
-  fp = fopen(file_path, "ab");
+  fp = fopen(file_path, "wb");
   if (NULL == fp) {
       printf("Error opening file");
   } else {
     // Receive length
     valread = read(sock, &nLeft, sizeof(nLeft));
     nLeft = ntohl(nLeft);
+    printf("nLeft=%lu\n", (unsigned long)nLeft);
 
     /* Receive data in chunks */
     while (nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0) {
       fwrite(buffer, 1, valread, fp);
-      nLeft -= valread;
+      if(valread > 0){
+        nLeft -= valread;
+      } // TODO tirar if?
+      printf("no whileee nLeft=%d valread=%d\n", nLeft, valread);
     }
     if (valread < 0) {
         printf("\n Read Error \n");
     }
   }
+  printf("SAIU\n");
   fclose(fp);
 }
 
 void send_file(char * file) {
   char file_path[256];
   sprintf(file_path, "%s/%s", user_sync_dir_path, file);
-  int length_converted, stat_result; // REVIEW is int enough for length_converted?
+  uint32_t length_converted;
+  int stat_result;
   struct stat st;
 
   stat_result = stat(file_path, &st);
@@ -162,7 +169,8 @@ void send_file(char * file) {
 void list_files(){
   char filename_string[256];
   struct dirent **namelist;
-  int i, n, nList = 0, nListConverted; // REVIEW Is int enough for nList and nListConverted?
+  int i, n;
+  uint32_t nList = 0, nListConverted;
 
   printf("<~ %s requested LIST\n", username);
 

@@ -22,3 +22,4 @@
 - [ ] Liberar memória, free() ...
 - [ ] Remover warnings
 - [ ] Tem como reutilizar mais código entre as funcoes de send e receive files?
+- [ ] barra de progresso ao fazer download e upload?
