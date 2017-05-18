@@ -11,7 +11,7 @@ dropboxUtil.o:
 	$(CC) -c $(SRC_DIR)/dropboxUtil.c -Wall -o $(BIN_DIR)/dropboxUtil.o
 
 client: dropboxUtil.o
-	$(CC) -o $(BIN_DIR)/dropboxClient $(SRC_DIR)/dropboxClient.c $(BIN_DIR)/dropboxUtil.o -Wall
+	$(CC) -o $(BIN_DIR)/dropboxClient $(SRC_DIR)/dropboxClient.c $(BIN_DIR)/dropboxUtil.o -Wall -pthread
 
 server: dropboxUtil.o
 	$(CC) -o $(BIN_DIR)/dropboxServer $(SRC_DIR)/dropboxServer.c $(BIN_DIR)/dropboxUtil.o -Wall -pthread

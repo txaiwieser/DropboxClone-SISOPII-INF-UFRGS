@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/inotify.h>
 #include <stdlib.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -9,6 +10,7 @@
 #include <unistd.h>
 #include <netdb.h>
 #include <libgen.h>
+#include <pthread.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxClient.h"
 
@@ -18,6 +20,8 @@ char server_host[256];
 int server_port = 0, sock = 0;
 char server_user[MAXNAME];
 char user_sync_dir_path[256];
+#define EVENT_SIZE  ( sizeof (struct inotify_event) )
+#define BUF_LEN ( 1024 * ( EVENT_SIZE + 16 ) )
 
 // TODO Handle errors on send_file, get_file, receive_file (on server), send_file (on server). If file can't be opened, it should return an error and exit. Also, display success messages.
 void send_file(char *file) {
@@ -30,8 +34,7 @@ void send_file(char *file) {
 
     if (stat_result == 0) {
       FILE *fp = fopen(file,"rb");
-      if (fp == NULL) {
-          printf("File open error");
+      if (fp != NULL) {
 
           // Concatenate strings to get method = "UPLOAD filename"
           sprintf(method, "UPLOAD %s", basename(file));
@@ -148,12 +151,88 @@ void cmdExit() {
     close_connection();
 }
 
+void sync_client(){
+  // TODO sync_client
+}
+
+void* sync_daemon(void* unused) {
+  // TODO exclude hidden files
+  // TODO sleep for 10 seconds?
+  int length;
+  int fd;
+  int wd;
+  char buffer[BUF_LEN];
+  char filepath[MAXNAME];
+
+  fd = inotify_init();
+
+  if ( fd < 0 ) {
+    perror( "inotify_init" );
+  }
+
+  wd = inotify_add_watch( fd, user_sync_dir_path,
+                         IN_MODIFY | IN_CREATE | IN_DELETE );
+
+  while (1) {
+    int i = 0;
+    length = read( fd, buffer, BUF_LEN );
+
+    if ( length < 0 ) {
+      perror( "read" );
+    }
+
+    while ( i < length ) {
+      struct inotify_event *event = ( struct inotify_event * ) &buffer[ i ];
+      if ( event->len ) {
+        if ( event->mask & IN_CREATE ) {
+          if ( event->mask & IN_ISDIR ) {
+            printf( "The directory %s was created.\n", event->name );
+          }
+          else {
+            printf( "The file %s was created.\n", event->name );
+            sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
+            printf("FILEpath=%s\n", filepath );
+            send_file(filepath);
+          }
+        }
+        else if ( event->mask & IN_DELETE ) {
+          if ( event->mask & IN_ISDIR ) {
+            printf( "The directory %s was deleted.\n", event->name );
+          }
+          else {
+            printf( "The file %s was deleted.\n", event->name );
+          }
+        }
+        else if ( event->mask & IN_MODIFY ) {
+          if ( event->mask & IN_ISDIR ) {
+            printf( "The directory %s was modified.\n", event->name );
+          }
+          else {
+            printf( "The file %s was modified.\n", event->name );
+            sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
+            printf("FILEpath=%s\n", filepath );
+            send_file(filepath);
+          }
+        }
+      }
+      i += EVENT_SIZE + event->len;
+    }
+  }
+  ( void ) inotify_rm_watch( fd, wd );
+  ( void ) close( fd );
+
+  exit( 0 );
+
+  //TODO verificar se essa thread está fechando quando a main é encerrada
+}
+
 int main(int argc, char * argv[]) {
     char cmd[256];
     char filename[256];
     char buffer[1024];
     char * token;
     int valread;
+    pthread_t thread_id;
 
     // Check number of parameteres
     if (argc < 4) {
@@ -185,6 +264,11 @@ int main(int argc, char * argv[]) {
     }
 
     debug_printf("[Connection established]\n");
+
+    if (pthread_create(&thread_id, NULL, sync_daemon, NULL) < 0) {
+        perror("could not create sync_client thread");
+        return 1;
+    }
 
     printf("Welcome to Dropbox! - v 1.0\n");
     cmdMan();
@@ -247,10 +331,6 @@ int connect_server(char * host, int port) {
     }
 
     return sock;
-}
-
-void sync_client() {
-  // TODO sync_client()
 }
 
 void close_connection() {
