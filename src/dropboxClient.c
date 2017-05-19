@@ -171,7 +171,9 @@ void sync_client(){
 }
 
 void* sync_daemon(void* unused) {
+  // TODO quando o arquivo é sobrescrito, no final ta adicionando um "UPLOAD filename.ext". Isso aparentemente só acontece qndo o arquivo é sobrescrito. Isso ta acontecendo quando se edita oa rquivo pelo gedit, mas nao pelo vim, aparentemente.
   // TODO nao pode enviar um arquivo que foi recém baixado pelo comando de download
+  // TODO o IN_CLOSE_WRITE nao capta quando um arquivo zip foi modificado?
   int length;
   int fd;
   int wd;
@@ -201,7 +203,7 @@ void* sync_daemon(void* unused) {
       if ( event->len ) {
           if ( !(event->mask & IN_ISDIR) ) {
               if ( event->mask & IN_CLOSE_WRITE  ) {
-                  if ( event->name[0] != '.' ) { // Exclude hidden files
+                  if ( event->name[0] != '.' ) { // If it's not a hidden file
                       debug_printf( "The file %s was created or modified.\n", event->name );
                       sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
                       send_file(filepath);
