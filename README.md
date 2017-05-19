@@ -13,6 +13,8 @@
 - [x] download
 - [x] .gitignore
 - [ ] Semaforos, mutex... onde?
+- [ ] mutex 1: impedir que um usuario baixe, em um dispositivo, um arquivo enquanto ele está sendo enviado ao servidor por outro dispositivo.
+- [ ] mutex 2 : impedir que daemon rode enquanto o usuario está upando ou fazendo download?
 - [ ] verificar especificação
 - [ ] Confirmar (com ps aux) se threads estão realmente sendo fechadas. Problema com porta acontecendo ainda?
 - [ ] Teste e tratamento de erros

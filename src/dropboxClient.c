@@ -83,7 +83,7 @@ void send_file(char *file) {
     }
 }
 
-// TODO confirmar se tá funcionando pra downloads seguidos de arquivos grandes e pequenos ou se tá com o mesmo problema que tava a funcao de upload
+// REVIEW confirmar se tá funcionando pra downloads seguidos de arquivos grandes e pequenos ou se tá com o mesmo problema que tava a funcao de upload
 void get_file(char *file) {
     int valread;
     int32_t nLeft;
@@ -184,7 +184,7 @@ void* sync_daemon(void* unused) {
   }
 
   wd = inotify_add_watch( fd, user_sync_dir_path,
-                         IN_MODIFY | IN_CREATE ); // REVIEW e se for removido não faz nada?
+                         IN_CLOSE_WRITE ); // REVIEW e se for removido não faz nada? está certo nao usar  | IN_MODIFY | IN_CREATE ?
 
   while (1) {
     int i = 0;
@@ -199,9 +199,8 @@ void* sync_daemon(void* unused) {
     while ( i < length ) {
       struct inotify_event *event = ( struct inotify_event * ) &buffer[ i ];
       if ( event->len ) {
-          sleep(1); // FIXME esse sleep foi adicionado porque senão o inotify às vezes vê que o arquivo foi criado e acha que ele está pronto para ser enviado ao servdior, mas na verdade ele ainda não foi (completamente) preenchido. Qual o melhor jeito de resolver isso? semaforo?
           if ( !(event->mask & IN_ISDIR) ) {
-              if ( event->mask & IN_CREATE || event->mask & IN_MODIFY ) {
+              if ( event->mask & IN_CLOSE_WRITE  ) {
                   if ( event->name[0] != '.' ) { // Exclude hidden files
                       debug_printf( "The file %s was created or modified.\n", event->name );
                       sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);

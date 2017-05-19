@@ -84,7 +84,7 @@ void sync_server() {
 }
 
 void receive_file(char *file) {
-  // TODO adicionar/atualizar o arquivo no struct 
+  // TODO adicionar/atualizar o arquivo no struct
   int valread;
   int32_t nLeft;
   char buffer[1024] = {0};
@@ -190,7 +190,7 @@ void list_files(){
           free(namelist[i]);
       }
   } else {
-      perror("Couldn't open the directory");
+      perror("Couldn't open the directory or it's empty");
       nListConverted = htonl(0);
       write(sock, &nListConverted, sizeof(nListConverted));
   }
