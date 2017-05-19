@@ -84,6 +84,7 @@ void sync_server() {
 }
 
 void receive_file(char *file) {
+  // TODO adicionar/atualizar o arquivo no struct 
   int valread;
   int32_t nLeft;
   char buffer[1024] = {0};

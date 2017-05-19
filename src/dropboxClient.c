@@ -50,11 +50,10 @@ void send_file(char *file) {
           // Detect if file was created and can be transfered
           valread = read(sock, buffer, sizeof(buffer));
           if (valread > 0) {
-            //sleep(1); // FIXME Remover. Coloquei apenas para testar
             /* Send file size to server */
             length_converted = htonl(st.st_size);
             write(sock, &length_converted, sizeof(length_converted));
-            //sleep(1); // FIXME Remover. Coloquei apenas para testar
+
             /* Read data from file and send it */
             while (1) {
                 /* First read file in chunks of 1024 bytes */
@@ -85,6 +84,7 @@ void send_file(char *file) {
 }
 
 // TODO confirmar se tá funcionando pra downloads seguidos de arquivos grandes e pequenos ou se tá com o mesmo problema que tava a funcao de upload
+// TODO de acordo com a especificação, o download é feito para o diretorio local (de onde o servidor foi chamado), e nao (necessariamente) para o sync_dir
 void get_file(char *file) {
     int valread;
     int32_t nLeft;
@@ -164,11 +164,11 @@ void cmdExit() {
 }
 
 void sync_client(){
+  // TODO tem que baixar os arquivos do servidor em algum momento. Quando? é aqui?
   // TODO sync_client
 }
 
 void* sync_daemon(void* unused) {
-  // sleep(10); // TODO sleep for 10 seconds?
   // TODO nao pode enviar um arquivo que foi recém baixado pelo comando de download
   int length;
   int fd;
@@ -182,7 +182,7 @@ void* sync_daemon(void* unused) {
   }
 
   wd = inotify_add_watch( fd, user_sync_dir_path,
-                         IN_MODIFY | IN_CREATE ); // TODO e se for removido não faz nada?
+                         IN_MODIFY | IN_CREATE ); // REVIEW e se for removido não faz nada?
 
   while (1) {
     int i = 0;
@@ -210,6 +210,7 @@ void* sync_daemon(void* unused) {
       }
       i += EVENT_SIZE + event->len;
     }
+    // sleep(10); // TODO sleep for 10 seconds?
   }
   ( void ) inotify_rm_watch( fd, wd );
   ( void ) close( fd );
@@ -246,6 +247,9 @@ int main(int argc, char * argv[]) {
     // Define path to user sync_dir folder
     sprintf(user_sync_dir_path, "%s/sync_dir_%s", getenv("HOME"), server_user);
 
+    // Create user sync_dir if it not exists
+    cmdGetSyncDir();
+
     // Send username to server
     write(sock, server_user, strlen(server_user));
 
@@ -280,11 +284,7 @@ int main(int argc, char * argv[]) {
             }
             else if (strcmp(token, "download") == 0) {
                 scanf("%s", filename);
-                if ((dir_exists(user_sync_dir_path) == 0)) {
-                  get_file(filename);
-                } else {
-                  printf("Run get_sync_dir first.\n");
-                }
+                get_file(filename);
             }
             else if (strcmp(token, "list") == 0) cmdList();
             else if (strcmp(token, "get_sync_dir") == 0) cmdGetSyncDir();
