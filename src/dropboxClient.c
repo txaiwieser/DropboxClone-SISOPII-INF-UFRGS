@@ -25,29 +25,30 @@ char user_sync_dir_path[256];
 
 // TODO Handle errors on send_file, get_file, receive_file (on server), send_file (on server). If file can't be opened, it should return an error and exit. Also, display success messages.
 void send_file(char *file) {
-    uint32_t length_converted;
+    int stat_result;
     char method[160];
     struct stat st;
-    int stat_result = stat(file, &st);
+    int32_t length_converted;
 
-    /* Open the file that we wish to transfer */
+    stat_result = stat(file, &st);
 
-    if (stat_result == 0) {
+    if (stat_result == 0) { // If file exists
+      /* Open the file that we wish to transfer */
       FILE *fp = fopen(file,"rb");
-      if (fp != NULL) {
-
+      if (fp == NULL) {
+        printf("Couldn't open the file\n");
+      } else {
           // Concatenate strings to get method = "UPLOAD filename"
           sprintf(method, "UPLOAD %s", basename(file));
 
           // Call to the server
           send(sock, method, strlen(method), 0);
           debug_printf("[%s method sent]\n", method);
-
+          sleep(1); // FIXME Remover. Coloquei apenas para testar
           /* Send file size to server */
           length_converted = htonl(st.st_size);
           write(sock, &length_converted, sizeof(length_converted));
-          printf("length_converted enviado=%ld size enviado=%lld\n", (unsigned long)length_converted, st.st_size);
-
+          sleep(1); // FIXME Remover. Coloquei apenas para testar
           /* Read data from file and send it */
           while (1) {
               /* First read file in chunks of 1024 bytes */
@@ -74,12 +75,12 @@ void send_file(char *file) {
     } else {
       printf("File doesn't exist! Pass a valid filename.\n");
     }
-};
+}
 
 // TODO confirmar se tá funcionando pra downloads seguidos de arquivos grandes e pequenos ou se tá com o mesmo problema que tava a funcao de upload
 void get_file(char *file) {
     int valread;
-    uint32_t nLeft;
+    int32_t nLeft;
     char buffer[1024] = {0};
     char method[160];
     char file_path[256];
@@ -119,7 +120,7 @@ void get_file(char *file) {
 
 void cmdList() {
     int valread;
-    uint32_t nLeft;
+    int32_t nLeft;
     char buffer[1024] = {0};
 
     send(sock, "LIST", 4, 0);
@@ -162,6 +163,7 @@ void sync_client(){
 void* sync_daemon(void* unused) {
   // TODO exclude hidden files (.swp files segfault?)
   // TODO sleep for 10 seconds?
+  // TODO nao pode enviar um arquivo que foi recém baixado pelo comando de download
   int length;
   int fd;
   int wd;
@@ -189,6 +191,7 @@ void* sync_daemon(void* unused) {
     while ( i < length ) {
       struct inotify_event *event = ( struct inotify_event * ) &buffer[ i ];
       if ( event->len ) {
+          sleep(1); // FIXME esse sleep foi adicionado porque senão o inotify às vezes vê que o arquivo foi criado e acha que ele está pronto para ser enviado ao servdior, mas na verdade ele ainda não foi (completamente) preenchido. Qual o melhor jeito de resolver isso? semaforo?
         if ( event->mask & IN_CREATE ) {
           if ( event->mask & IN_ISDIR ) {
             printf( "The directory %s was created.\n", event->name );
@@ -196,7 +199,6 @@ void* sync_daemon(void* unused) {
           else {
             printf( "The file %s was created.\n", event->name );
             sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
-            printf("FILEpath=%s\n", filepath );
             send_file(filepath);
           }
         }
@@ -215,7 +217,6 @@ void* sync_daemon(void* unused) {
           else {
             printf( "The file %s was modified.\n", event->name );
             sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
-            printf("FILEpath=%s\n", filepath );
             send_file(filepath);
           }
         }
