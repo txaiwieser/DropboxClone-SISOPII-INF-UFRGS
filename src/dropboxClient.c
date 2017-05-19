@@ -161,8 +161,7 @@ void sync_client(){
 }
 
 void* sync_daemon(void* unused) {
-  // TODO exclude hidden files (.swp files segfault?)
-  // TODO sleep for 10 seconds?
+  // sleep(10); // TODO sleep for 10 seconds?
   // TODO nao pode enviar um arquivo que foi recém baixado pelo comando de download
   int length;
   int fd;
@@ -176,7 +175,7 @@ void* sync_daemon(void* unused) {
   }
 
   wd = inotify_add_watch( fd, user_sync_dir_path,
-                         IN_MODIFY | IN_CREATE | IN_DELETE );
+                         IN_MODIFY | IN_CREATE ); // TODO e se for removido não faz nada?
 
   while (1) {
     int i = 0;
@@ -192,34 +191,15 @@ void* sync_daemon(void* unused) {
       struct inotify_event *event = ( struct inotify_event * ) &buffer[ i ];
       if ( event->len ) {
           sleep(1); // FIXME esse sleep foi adicionado porque senão o inotify às vezes vê que o arquivo foi criado e acha que ele está pronto para ser enviado ao servdior, mas na verdade ele ainda não foi (completamente) preenchido. Qual o melhor jeito de resolver isso? semaforo?
-        if ( event->mask & IN_CREATE ) {
-          if ( event->mask & IN_ISDIR ) {
-            printf( "The directory %s was created.\n", event->name );
+          if ( !(event->mask & IN_ISDIR) ) {
+              if ( event->mask & IN_CREATE || event->mask & IN_MODIFY ) {
+                  if ( event->name[0] != '.' ) { // Exclude hidden files
+                      debug_printf( "The file %s was created or modified.\n", event->name );
+                      sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
+                      send_file(filepath);
+                  }
+              }
           }
-          else {
-            printf( "The file %s was created.\n", event->name );
-            sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
-            send_file(filepath);
-          }
-        }
-        else if ( event->mask & IN_DELETE ) {
-          if ( event->mask & IN_ISDIR ) {
-            printf( "The directory %s was deleted.\n", event->name );
-          }
-          else {
-            printf( "The file %s was deleted.\n", event->name );
-          }
-        }
-        else if ( event->mask & IN_MODIFY ) {
-          if ( event->mask & IN_ISDIR ) {
-            printf( "The directory %s was modified.\n", event->name );
-          }
-          else {
-            printf( "The file %s was modified.\n", event->name );
-            sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
-            send_file(filepath);
-          }
-        }
       }
       i += EVENT_SIZE + event->len;
     }
