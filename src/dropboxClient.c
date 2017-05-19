@@ -76,6 +76,7 @@ void send_file(char *file) {
     }
 };
 
+// TODO confirmar se tá funcionando pra downloads seguidos de arquivos grandes e pequenos ou se tá com o mesmo problema que tava a funcao de upload
 void get_file(char *file) {
     int valread;
     uint32_t nLeft;
@@ -159,7 +160,7 @@ void sync_client(){
 }
 
 void* sync_daemon(void* unused) {
-  // TODO exclude hidden files
+  // TODO exclude hidden files (.swp files segfault?)
   // TODO sleep for 10 seconds?
   int length;
   int fd;

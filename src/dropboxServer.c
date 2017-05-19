@@ -101,6 +101,7 @@ void receive_file(char *file) {
     valread = read(sock, &nLeft, sizeof(nLeft));
     nLeft = ntohl(nLeft);
     printf("nLeft=%lu\n", (unsigned long)nLeft);
+    // FIXME aleatoriamente para de funcionar. Parece que tá lendo lixo (leia-se algum dado enviado sem querer) no socket? Geralmente funciona pro primeiro arquivo e para de funcionar no segundo ou terceiro porque lê um valor gigante de nRead, e então acha que o arquivo que está sendo esperado é enorme
 
     /* Receive data in chunks */
     while (nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0) {
