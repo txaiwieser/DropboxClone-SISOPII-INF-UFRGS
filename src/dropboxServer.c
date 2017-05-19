@@ -97,17 +97,17 @@ void receive_file(char *file) {
   if (NULL == fp) {
       printf("Error opening file");
   } else {
+    // Send "OK" to confirm file was created and should be transfered
+    write(sock, "OK", 2);
+
     // Receive length
     valread = read(sock, &nLeft, sizeof(nLeft));
     nLeft = ntohl(nLeft);
-    debug_printf("nLeft lido: %d\n", nLeft);
 
     /* Receive data in chunks */
     while (nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0) {
-      debug_printf("nLeft antes de ler dados=%d\n",nLeft);
       fwrite(buffer, 1, valread, fp);
       nLeft -= valread;
-      debug_printf("nLeft depois=%d\n",nLeft);
     }
     if (valread < 0) {
         printf("\n Read Error \n");

@@ -28,6 +28,8 @@ void send_file(char *file) {
     int stat_result;
     char method[160];
     struct stat st;
+    char buffer[1024] = {0};
+    int valread;
     int32_t length_converted;
 
     stat_result = stat(file, &st);
@@ -44,31 +46,36 @@ void send_file(char *file) {
           // Call to the server
           send(sock, method, strlen(method), 0);
           debug_printf("[%s method sent]\n", method);
-          sleep(1); // FIXME Remover. Coloquei apenas para testar
-          /* Send file size to server */
-          length_converted = htonl(st.st_size);
-          write(sock, &length_converted, sizeof(length_converted));
-          sleep(1); // FIXME Remover. Coloquei apenas para testar
-          /* Read data from file and send it */
-          while (1) {
-              /* First read file in chunks of 1024 bytes */
-              unsigned char buff[1024] = {0};
-              int nread = fread(buff, 1, sizeof(buff), fp);
 
-              /* If read was success, send data. */
-              if (nread > 0) {
-                  write(sock, buff, nread);
-              }
+          // Detect if file was created and can be transfered
+          valread = read(sock, buffer, sizeof(buffer));
+          if (valread > 0) {
+            //sleep(1); // FIXME Remover. Coloquei apenas para testar
+            /* Send file size to server */
+            length_converted = htonl(st.st_size);
+            write(sock, &length_converted, sizeof(length_converted));
+            //sleep(1); // FIXME Remover. Coloquei apenas para testar
+            /* Read data from file and send it */
+            while (1) {
+                /* First read file in chunks of 1024 bytes */
+                unsigned char buff[1024] = {0};
+                int nread = fread(buff, 1, sizeof(buff), fp);
 
-              /* Either there was error, or reached end of file */
-              if (nread < sizeof(buff)) {
-                  /*if (feof(fp))
-                      debug_printf("End of file\n"); */
-                  if (ferror(fp)) {
-                      printf("Error reading\n");
-                  }
-                  break;
-              }
+                /* If read was success, send data. */
+                if (nread > 0) {
+                    write(sock, buff, nread);
+                }
+
+                /* Either there was error, or reached end of file */
+                if (nread < sizeof(buff)) {
+                    /*if (feof(fp))
+                        debug_printf("End of file\n"); */
+                    if (ferror(fp)) {
+                        printf("Error reading\n");
+                    }
+                    break;
+                }
+            }
           }
       }
       fclose(fp);
