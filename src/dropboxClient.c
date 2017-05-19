@@ -84,15 +84,17 @@ void send_file(char *file) {
 }
 
 // TODO confirmar se tá funcionando pra downloads seguidos de arquivos grandes e pequenos ou se tá com o mesmo problema que tava a funcao de upload
-// TODO de acordo com a especificação, o download é feito para o diretorio local (de onde o servidor foi chamado), e nao (necessariamente) para o sync_dir
 void get_file(char *file) {
     int valread;
     int32_t nLeft;
     char buffer[1024] = {0};
     char method[160];
     char file_path[256];
+    char cwd[256];
 
-    sprintf(file_path, "%s/%s", user_sync_dir_path, file);
+    // Set saving path to current directory
+    getcwd(cwd, sizeof(cwd));
+    sprintf(file_path, "%s/%s", cwd, file);
 
     // Concatenate strings to get method = "DOWNLOAD filename"
     sprintf(method, "DOWNLOAD %s", file);
