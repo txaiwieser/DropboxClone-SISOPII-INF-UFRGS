@@ -1,6 +1,6 @@
 #include "dropboxUtil.h"
 
-#define MAXFILES 500 // REVIEW Quando deve ser? Pedir pro monitor
+#define MAXFILES 100
 
 typedef struct file_info {
   char name[MAXNAME]; // refere-se ao nome do arquivo

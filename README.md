@@ -4,6 +4,11 @@
 3. Inicie o cliente: ```./bin/dropboxClient usuario 127.0.0.1 3003```
 
 ## TO DO
+- [ ] ORGANIZAR ISSO AQUI!
+
+-----
+
+
 - [x] Makefile - Incluir coisas do dropboxUtil
 - [x] Integrar exemplos socket
 - [x] Ver como acoes vao ser passadas para o servidor e vice-versa
@@ -28,9 +33,14 @@
 
 
 ## Dúvidas para pedir para o monitor
-- Se o arquivo foi deletado da pasta do usuário, o daemon precisa fazer algo (apagar do servidor)?
-- Qual deve ser o valor da MAX_FILES e MAX_NAME?
 - sync_client() precisa ser implementada ou é o próprio daemon? Pode mudar parametros dela (o pthread exige)?
 - sync_server() porque o servidor iria precisar se atualizar com o diretorio do usuário? se o servidor chamar essa funcao, o cliente terá que ouvi-la. logo, seria necessário mais uma thread no cliente para ficar recebendo as requisicoes de sync do servidor. Se tiver 2 clientes com conteudos diferentes na sua pasta, o servidor iria sincronizar com qual das duas?
-- podemos alterar a struct?
-- Qual seria o melhor valor pro listen? A gente colocou 3
+
+# anotacoes pra organizar
+- Update file list when new server uploaded... duvidas fb
+- e se o server cair? cliente tem q ser avisado
+- Criar outro socket só p upload e download?
+- Tem q ver se o retorno do write e read foi completo, sempre
+- tem que salvar o timestamp (do arquivo no servidor) do arquivo baixado depois de escrevê-lo. tem que fazer isso do lado do servidor também, quando ele recebe um arquivo.
+- Deletar arquivo caso ele tenha sido deletado do sync_dir. se ele foi deletado quando o usuario estava online, ao conectar no servidor o arquivo deve ser removido do servidor.
+- antes de fazer upload pro servidor, comparar com timestamp do servidor.
