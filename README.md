@@ -32,4 +32,5 @@
 - Qual deve ser o valor da MAX_FILES e MAX_NAME?
 - sync_client() precisa ser implementada ou é o próprio daemon? Pode mudar parametros dela (o pthread exige)?
 - sync_server() porque o servidor iria precisar se atualizar com o diretorio do usuário? se o servidor chamar essa funcao, o cliente terá que ouvi-la. logo, seria necessário mais uma thread no cliente para ficar recebendo as requisicoes de sync do servidor. Se tiver 2 clientes com conteudos diferentes na sua pasta, o servidor iria sincronizar com qual das duas?
+- podemos alterar a struct?
 - Qual seria o melhor valor pro listen? A gente colocou 3
