@@ -229,6 +229,7 @@ void *connection_handler(void *socket_desc) {
 	char client_message[1024];
   struct tailq_entry *item;
   struct tailq_entry *tmp_item;
+  int *nullReturn = NULL;
 
   // Receive username from client
   read_size = recv(sock, username, sizeof(username), 0);
@@ -248,7 +249,7 @@ void *connection_handler(void *socket_desc) {
     if (item->client_entry.devices[0] > 0 && item->client_entry.devices[1] > 0) {
       printf("Client already connected in two devices. Closing connection...\n");
       shutdown(sock, 2);
-      exit(0);
+      pthread_exit(nullReturn);
     }
     // If it's connected only in one device, connect the second device.
     int device_to_use = (item->client_entry.devices[0] < 0) ? 0 : 1;
@@ -259,7 +260,7 @@ void *connection_handler(void *socket_desc) {
     item = malloc(sizeof(*item));
   	if (item == NULL) {
   		perror("malloc failed");
-  		exit(EXIT_FAILURE);
+      pthread_exit(nullReturn);
   	}
 
     item->client_entry.devices[0] = sock;
