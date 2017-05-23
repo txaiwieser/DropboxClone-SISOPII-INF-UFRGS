@@ -7,7 +7,6 @@
 ### Alta prioridade
 - [ ] Deletar arquivo no servidor caso ele tenha sido deletado no sync_dir. Caso o cliente esteja aberto no momento, o arquivo deve ser deletado imediatamente do servidor. Senão, deve ser deletado na próxima vez que conectar ao servidor.
 - [ ] Onde usar semáforos e mutex? (1: impedir que um usuario baixe, em um dispositivo, um arquivo enquanto ele está sendo enviado ao servidor por outro dispositivo; 2: impedir que daemon rode enquanto o usuario está upando ou fazendo download?; 3: onde mais?)
-- [ ] Tem que salvar o timestamp do arquivo no receptor (tanto cliente como servidor) após acabar de escrevê-lo.
 - [ ] Sincronizar cliente com servidor
 - [ ] Sincronizar servidor com cliente
 

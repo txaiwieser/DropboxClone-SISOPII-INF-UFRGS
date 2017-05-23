@@ -8,6 +8,8 @@
 #include <sys/stat.h>
 #include <sys/queue.h>
 #include <dirent.h>
+#include <time.h>
+#include <utime.h>
 #include <pthread.h>
 #include <unistd.h>
 #include "../include/dropboxUtil.h"
@@ -89,6 +91,8 @@ void receive_file(char *file) {
   int32_t nLeft;
   char buffer[1024] = {0};
   char file_path[256];
+  time_t original_file_time;
+  struct utimbuf new_times;
 
   sprintf(file_path, "%s/%s", user_sync_dir_path, file);
 
@@ -106,7 +110,7 @@ void receive_file(char *file) {
     nLeft = ntohl(nLeft);
 
     /* Receive data in chunks */
-    while (nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0) {
+    while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
       fwrite(buffer, 1, valread, fp);
       nLeft -= valread;
     }
@@ -116,6 +120,12 @@ void receive_file(char *file) {
   }
   debug_printf("Fechando arquivo\n");
   fclose (fp);
+
+  // Set modtime to original file modtime
+  valread = read(sock, &original_file_time, sizeof(time_t));
+  new_times.modtime = original_file_time; /* set mtime to original file time */
+  new_times.actime = time(NULL); /* set atime to current time */
+  utime(file_path, &new_times);
 };
 
 void send_file(char * file) {
@@ -162,6 +172,10 @@ void send_file(char * file) {
         }
       }
       fclose(fp);
+
+      // Send file modtime
+      // TODO use htonl and ntohl?
+      write(sock, &st.st_mtime, sizeof(st.st_mtime));
     } else {
       printf("File doesn't exist!\n");
   }
@@ -273,7 +287,7 @@ void *connection_handler(void *socket_desc) {
   }
 
   // Send "OK" to confirm connection was accepted.
-  write(sock, "OK", 2);
+  write(sock, "OK", 2); // TODO resolver de outro jeito?
 
   // Define path to user folder on server
   sprintf(user_sync_dir_path, "%s/server_sync_dir_%s", getenv("HOME"), username);

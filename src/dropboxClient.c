@@ -7,10 +7,13 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <time.h>
+#include <utime.h>
 #include <unistd.h>
 #include <netdb.h>
 #include <libgen.h>
 #include <pthread.h>
+#include <math.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxClient.h"
 
@@ -78,6 +81,9 @@ void send_file(char *file) {
           }
       }
       fclose(fp);
+      // Send file modtime
+      // TODO use htonl and ntohl?
+      write(sock, &st.st_mtime, sizeof(st.st_mtime));
     } else {
       printf("File doesn't exist! Pass a valid filename.\n");
     }
@@ -91,6 +97,8 @@ void get_file(char *file) {
     char method[160];
     char file_path[256];
     char cwd[256];
+    time_t original_file_time;
+    struct utimbuf new_times;
 
     // Set saving path to current directory
     getcwd(cwd, sizeof(cwd));
@@ -116,7 +124,7 @@ void get_file(char *file) {
       nLeft = ntohl(nLeft);
 
       /* Receive data in chunks */
-      while (nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0) {
+      while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
         fwrite(buffer, 1, valread, fp);
         nLeft -= valread;
       }
@@ -125,6 +133,12 @@ void get_file(char *file) {
       }
     }
     fclose (fp);
+
+    // Set modtime to original file modtime
+    valread = read(sock, &original_file_time, sizeof(time_t));
+    new_times.modtime = original_file_time; /* set mtime to original file time */
+    new_times.actime = time(NULL); /* set atime to current time */
+    utime(file_path, &new_times);
 };
 
 void cmdList() {
