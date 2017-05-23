@@ -18,6 +18,7 @@
 __thread char username[MAXNAME];
 __thread char user_sync_dir_path[256];
 __thread int sock;
+__thread CLIENT_t *pClientEntry; // pointer to client struct in client list
 
 TAILQ_HEAD(, tailq_entry) my_tailq_head;
 
@@ -86,13 +87,26 @@ void sync_server() {
 }
 
 void receive_file(char *file) {
-  // TODO adicionar/atualizar o arquivo no struct
   int valread;
   int32_t nLeft;
   char buffer[1024] = {0};
   char file_path[256];
   time_t original_file_time;
   struct utimbuf new_times;
+  int i, found_file = 0, first_free_index = -1;
+
+  // Search for file in user struct.
+  for(i = 0; i < MAXFILES && !found_file; i++){
+    // Stop if file is found
+    if(strcmp(pClientEntry->file_info[i].name, file) == 0)
+      found_file = 1;
+
+    // FIXME first_free_index ta ficando sempre -1
+    if(pClientEntry->file_info[i].name == NULL && first_free_index == -1)
+      first_free_index = i;
+  }
+
+  // TODO comparar timestamp. se mais antigo q a versao do servidor, nao atualizar.
 
   sprintf(file_path, "%s/%s", user_sync_dir_path, file);
 
@@ -126,6 +140,13 @@ void receive_file(char *file) {
   new_times.modtime = original_file_time; /* set mtime to original file time */
   new_times.actime = time(NULL); /* set atime to current time */
   utime(file_path, &new_times);
+
+  // If file already exists on client file list
+  if(found_file){
+    // TODO atualiza os dados do arquivo
+  } else {
+    // TODO insere no primeiro slot livre
+  }
 };
 
 void send_file(char * file) {
@@ -313,6 +334,7 @@ void *connection_handler(void *socket_desc) {
 
     TAILQ_INSERT_TAIL(&my_tailq_head, client_node, entries);
   }
+  pClientEntry = &(client_node->client_entry);
 
   // Send "OK" to confirm connection was accepted.
   write(sock, "OK", 2);

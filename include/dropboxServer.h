@@ -16,7 +16,7 @@ typedef struct client {
 } CLIENT_t;
 
 struct tailq_entry{
-    struct client client_entry;
+    CLIENT_t client_entry;
     TAILQ_ENTRY(tailq_entry) entries;
 };
 
