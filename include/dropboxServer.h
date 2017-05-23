@@ -5,7 +5,7 @@
 typedef struct file_info {
   char name[MAXNAME]; // refere-se ao nome do arquivo
   char extension[MAXNAME]; // refere-se ao tipo de extensão do arquivo
-  char last_modified[MAXNAME]; // refere-se a data da última modificação no arquivo
+  char last_modified[MAXNAME]; // refere-se a data da última modificação no arquivo // TODO use timestamp instead of string
   int size; // indica o tamanho do arquivo, em bytes
 } FILE_INFO_t;
 

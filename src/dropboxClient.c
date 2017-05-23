@@ -166,13 +166,12 @@ void cmdExit() {
 }
 
 void sync_client(){
-  // TODO tem que baixar os arquivos do servidor em algum momento. Quando? é aqui?
   // TODO sync_client
 }
 
 void* sync_daemon(void* unused) {
   // TODO quando o arquivo é sobrescrito, no final ta adicionando um "UPLOAD filename.ext". Isso aparentemente só acontece qndo o arquivo é sobrescrito. Isso ta acontecendo quando se edita oa rquivo pelo gedit, mas nao pelo vim, aparentemente.
-  // TODO nao pode enviar um arquivo que foi recém baixado pelo comando de download
+  // TODO nao pode enviar um arquivo que foi recém baixado pelo comando de download. Como fazer isso? Colocá-lo em uma lista e aí antes de enviar percorrer a lista para ver se ele está lá? Se estiver, nao envia pro servidor e o remove da lista.
   // TODO o IN_CLOSE_WRITE nao capta quando um arquivo zip foi modificado?
   int length;
   int fd;
@@ -186,7 +185,7 @@ void* sync_daemon(void* unused) {
   }
 
   wd = inotify_add_watch( fd, user_sync_dir_path,
-                         IN_CLOSE_WRITE ); // REVIEW e se for removido não faz nada? está certo nao usar  | IN_MODIFY | IN_CREATE ?
+                         IN_CLOSE_WRITE ); // TODO se arquivo for removido tem que apagá-lo
 
   while (1) {
     int i = 0;
