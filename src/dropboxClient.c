@@ -185,7 +185,7 @@ void* sync_daemon(void* unused) {
   }
 
   wd = inotify_add_watch( fd, user_sync_dir_path,
-                         IN_CLOSE_WRITE ); // TODO se arquivo for removido tem que apagá-lo
+                         IN_CLOSE_WRITE ); // TODO se arquivo for removido tem que apagá-lo no servidor. Se for renomeado, tem que renomeá-lo no servidor.
 
   while (1) {
     int i = 0;
