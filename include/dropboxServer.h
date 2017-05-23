@@ -3,9 +3,8 @@
 #define MAXFILES 100
 
 typedef struct file_info {
-  char name[MAXNAME]; // refere-se ao nome do arquivo
-  char extension[MAXNAME]; // refere-se ao tipo de extensão do arquivo
-  time_t last_modified; // refere-se a data da última modificação no arquivo // TODO use timestamp instead of string
+  char name[MAXNAME]; // refere-se ao nome do arquivo, incluindo a extensão
+  time_t last_modified; // refere-se a data da última modificação no arquivo
   int size; // indica o tamanho do arquivo, em bytes
 } FILE_INFO_t;
 

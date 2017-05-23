@@ -103,7 +103,7 @@ void receive_file(char *file) {
       printf("Error opening file");
   } else {
     // Send "OK" to confirm file was created and should be transfered
-    write(sock, "OK", 2);
+    write(sock, "OK", 2); // TODO resolver de outro jeito?
 
     // Receive length
     valread = read(sock, &nLeft, sizeof(nLeft));
@@ -182,6 +182,7 @@ void send_file(char * file) {
 }
 
 void list_files(){
+  // TODO em vez de escanear o diretorio, deve pegar os arquivos da struct
   char filename_string[256];
   struct dirent **namelist;
   int i, n;
@@ -212,26 +213,26 @@ void list_files(){
 }
 
 void free_device(){
-  struct tailq_entry *item;
-  struct tailq_entry *tmp_item;
+  struct tailq_entry *client_node;
+  struct tailq_entry *tmp_client_node;
 
-  for (item = TAILQ_FIRST(&my_tailq_head); item != NULL; item = tmp_item){
-    if (strcmp(item->client_entry.userid, username) == 0) {
+  for (client_node = TAILQ_FIRST(&my_tailq_head); client_node != NULL; client_node = tmp_client_node){
+    if (strcmp(client_node->client_entry.userid, username) == 0) {
       // Set current sock device free
-      if (item->client_entry.devices[0] == sock) {
-        item->client_entry.devices[0] = -1;
-      } else if (item->client_entry.devices[1] == sock) {
-        item->client_entry.devices[1] = -1;
+      if (client_node->client_entry.devices[0] == sock) {
+        client_node->client_entry.devices[0] = -1;
+      } else if (client_node->client_entry.devices[1] == sock) {
+        client_node->client_entry.devices[1] = -1;
       }
 
       // Set logged_in to 0 if user is not connected anymore in any device.
-      if (item->client_entry.devices[0] == -1 && item->client_entry.devices[0] == -1){
-        item->client_entry.logged_in = 0;
+      if (client_node->client_entry.devices[0] == -1 && client_node->client_entry.devices[0] == -1){
+        client_node->client_entry.logged_in = 0;
       }
 
       break;
     }
-    tmp_item = TAILQ_NEXT(item, entries);
+    tmp_client_node = TAILQ_NEXT(client_node, entries);
   }
 }
 
@@ -241,59 +242,80 @@ void *connection_handler(void *socket_desc) {
 	sock = *(int *) socket_desc;
 	int read_size;
 	char client_message[1024];
-  struct tailq_entry *item;
-  struct tailq_entry *tmp_item;
+  struct tailq_entry *client_node;
+  struct tailq_entry *tmp_client_node;
   int *nullReturn = NULL;
+  struct dirent **namelist;
+  int i, n;
+  struct stat st;
+  char file_path[256];
 
   // Receive username from client
   read_size = recv(sock, username, sizeof(username), 0);
   username[read_size] = '\0';
-
-  // Search for client in client list
-  for (item = TAILQ_FIRST(&my_tailq_head); item != NULL; item = tmp_item) {
-		if (strcmp(item->client_entry.userid, username) == 0) {
-			break;
-		}
-    tmp_item = TAILQ_NEXT(item, entries);
-	}
-
-  // If it's found...
-  if (item != NULL) {
-    // and is already connected in two devices, return an error message and close connection.
-    if (item->client_entry.devices[0] > 0 && item->client_entry.devices[1] > 0) {
-      printf("Client already connected in two devices. Closing connection...\n");
-      shutdown(sock, 2);
-      pthread_exit(nullReturn);
-    }
-    // If it's connected only in one device, connect the second device.
-    int device_to_use = (item->client_entry.devices[0] < 0) ? 0 : 1;
-    item->client_entry.devices[device_to_use] = sock;
-  }
-  // If it's not found, it's not connected, so it need to be added to the client list.
-  else {
-    item = malloc(sizeof(*item));
-  	if (item == NULL) {
-  		perror("malloc failed");
-      pthread_exit(nullReturn);
-  	}
-
-    item->client_entry.devices[0] = sock;
-    item->client_entry.devices[1] = -1;
-    strcpy(item->client_entry.userid, username);
-    item->client_entry.logged_in = 1;
-
-    // TODO Insert data into struct file_info
-    TAILQ_INSERT_TAIL(&my_tailq_head, item, entries);
-  }
-
-  // Send "OK" to confirm connection was accepted.
-  write(sock, "OK", 2); // TODO resolver de outro jeito?
 
   // Define path to user folder on server
   sprintf(user_sync_dir_path, "%s/server_sync_dir_%s", getenv("HOME"), username);
 
   // Create folder if it doesn't exist
   makedir_if_not_exists(user_sync_dir_path);
+
+  // Search for client in client list
+  for (client_node = TAILQ_FIRST(&my_tailq_head); client_node != NULL; client_node = tmp_client_node) {
+		if (strcmp(client_node->client_entry.userid, username) == 0) {
+			break;
+		}
+    tmp_client_node = TAILQ_NEXT(client_node, entries);
+	}
+
+  // If it's found...
+  if (client_node != NULL) {
+    // and is already connected in two devices, return an error message and close connection.
+    if (client_node->client_entry.devices[0] > 0 && client_node->client_entry.devices[1] > 0) {
+      printf("Client already connected in two devices. Closing connection...\n");
+      shutdown(sock, 2);
+      pthread_exit(nullReturn);
+    }
+    // If it's connected only in one device, connect the second device.
+    int device_to_use = (client_node->client_entry.devices[0] < 0) ? 0 : 1;
+    client_node->client_entry.devices[device_to_use] = sock;
+  }
+  // If it's not found, it's not connected, so it need to be added to the client list.
+  else {
+    client_node = malloc(sizeof(*client_node));
+  	if (client_node == NULL) {
+  		perror("malloc failed");
+      pthread_exit(nullReturn);
+  	}
+
+    client_node->client_entry.devices[0] = sock;
+    client_node->client_entry.devices[1] = -1;
+    strcpy(client_node->client_entry.userid, username);
+    client_node->client_entry.logged_in = 1;
+
+    // Insert data into struct file_info
+    n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
+    if (n > 2) { // Starting in i=2, it doesn't show '.' and '..'
+        for (i = 2; i < n; i++) {
+          sprintf(file_path, "%s/%s", user_sync_dir_path, namelist[i]->d_name);
+          stat(file_path, &st);
+
+          strcpy(client_node->client_entry.file_info[i-2].name, namelist[i]->d_name);
+          client_node->client_entry.file_info[i-2].last_modified = st.st_mtime;
+          client_node->client_entry.file_info[i-2].size = st.st_size;
+
+          free(namelist[i]);
+        }
+    } else {
+        perror("Couldn't open the directory or it's empty"); // TODO remove?
+    }
+    free(namelist);
+
+    TAILQ_INSERT_TAIL(&my_tailq_head, client_node, entries);
+  }
+
+  // Send "OK" to confirm connection was accepted.
+  write(sock, "OK", 2);
 
 	// Receive a message from client
 	while ((read_size = recv(sock, client_message, sizeof(client_message), 0)) > 0 ) {
