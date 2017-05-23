@@ -14,7 +14,6 @@
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxClient.h"
 
-// REVIEW Check if strings sizes and types used (mostly int) are enough
 // REVIEW do these variables need to be global?
 char server_host[256];
 int server_port = 0, sock = 0;
@@ -24,6 +23,7 @@ char user_sync_dir_path[256];
 #define BUF_LEN ( 1024 * ( EVENT_SIZE + 16 ) )
 
 // TODO Handle errors on send_file, get_file, receive_file (on server), send_file (on server). If file can't be opened, it should return an error and exit. Also, display success messages.
+// TODO antes de fazer upload pro servidor, comparar com timestamp do servidor.
 void send_file(char *file) {
     int stat_result;
     char method[160];

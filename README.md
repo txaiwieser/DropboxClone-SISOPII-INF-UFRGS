@@ -4,43 +4,27 @@
 3. Inicie o cliente: ```./bin/dropboxClient usuario 127.0.0.1 3003```
 
 ## TO DO
-- [ ] ORGANIZAR ISSO AQUI!
+### Alta prioridade
+- [ ] Deletar arquivo no servidor caso ele tenha sido deletado no sync_dir. Caso o cliente esteja aberto no momento, o arquivo deve ser deletado imediatamente do servidor. Senão, deve ser deletado na próxima vez que conectar ao servidor.
+- [ ] Onde usar semáforos e mutex? (1: impedir que um usuario baixe, em um dispositivo, um arquivo enquanto ele está sendo enviado ao servidor por outro dispositivo; 2: impedir que daemon rode enquanto o usuario está upando ou fazendo download?; 3: onde mais?)
+- [ ] Tem que salvar o timestamp do arquivo no receptor (tanto cliente como servidor) após acabar de escrevê-lo.
+- [ ] Sincronizar cliente com servidor
+- [ ] Sincronizar servidor com cliente
 
------
-
-
-- [x] Makefile - Incluir coisas do dropboxUtil
-- [x] Integrar exemplos socket
-- [x] Ver como acoes vao ser passadas para o servidor e vice-versa
-- [x] get_sync_dir
-- [x] list
-- [x] upload
-- [x] download
-- [x] .gitignore
-- [ ] Semaforos, mutex... onde?
-- [ ] mutex 1: impedir que um usuario baixe, em um dispositivo, um arquivo enquanto ele está sendo enviado ao servidor por outro dispositivo.
-- [ ] mutex 2 : impedir que daemon rode enquanto o usuario está upando ou fazendo download?
-- [ ] verificar especificação
-- [ ] Confirmar (com ps aux) se threads estão realmente sendo fechadas. Problema com porta acontecendo ainda?
-- [ ] Teste e tratamento de erros
-- [ ] checar se os valores máximos das strings e os tipos (int) são suficientes?
-- [ ] Segurança: e se o usuário passar um filename com "../" vai baixar algum arquivo indevido?
-- [ ] Renomear coisas do tailq? melhorar comentarios, identar codigo
-- [ ] Liberar memória, free() ...
-- [ ] Remover warnings
+### Média prioridade
+- [ ] Se a conexão com o servidor cair, o cliente poderia ser avisado
+- [ ] Segurança: se o usuário passar um filename com "../" vai baixar algum arquivo indevido? Pode até baixar arquivo de outra pessoa.
 - [ ] Tem como reutilizar mais código entre as funcoes de send e receive files?
-- [ ] barra de progresso ao fazer download e upload?
+- [ ] Ver se o retorno do write e read foi completo, sempre? Alberto disse que tem uma chance remota de isso dar problema. Em localhost deve ser muito raro.
+- [ ] Criar outro socket só p upload e download, como alberto falou na aula? nao entendi direito
 
+### Baixa prioridade / ideias extras
+- [ ] Barra de progresso ao fazer download e upload?
 
-## Dúvidas para pedir para o monitor
-- sync_client() precisa ser implementada ou é o próprio daemon? Pode mudar parametros dela (o pthread exige)?
-- sync_server() porque o servidor iria precisar se atualizar com o diretorio do usuário? se o servidor chamar essa funcao, o cliente terá que ouvi-la. logo, seria necessário mais uma thread no cliente para ficar recebendo as requisicoes de sync do servidor. Se tiver 2 clientes com conteudos diferentes na sua pasta, o servidor iria sincronizar com qual das duas?
-
-# anotacoes pra organizar
-- Update file list when new server uploaded... duvidas fb
-- e se o server cair? cliente tem q ser avisado
-- Criar outro socket só p upload e download?
-- Tem q ver se o retorno do write e read foi completo, sempre
-- tem que salvar o timestamp (do arquivo no servidor) do arquivo baixado depois de escrevê-lo. tem que fazer isso do lado do servidor também, quando ele recebe um arquivo.
-- Deletar arquivo caso ele tenha sido deletado do sync_dir. se ele foi deletado quando o usuario estava online, ao conectar no servidor o arquivo deve ser removido do servidor.
-- antes de fazer upload pro servidor, comparar com timestamp do servidor.
+## Revisar / Finalizar
+- [ ] Código bem comentado, bons nomes de variáveis, identação...
+- [ ] Checar se tamanhos de strings e tipos usados são suficientes e adequados
+- [ ] Liberar memória, free() ...
+- [ ] Confirmar que threads estão sendo fechadas ao encerrar execução. (Problema com porta deveria sumir em caso afirmativo, certo?)
+- [ ] Testar e confirmar se o tratamento de erros está adequado
+- [ ] Remover warnings
