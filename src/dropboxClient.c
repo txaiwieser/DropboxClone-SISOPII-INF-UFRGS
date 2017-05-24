@@ -88,7 +88,6 @@ void send_file(char *file) {
     }
 }
 
-// REVIEW confirmar se tá funcionando pra downloads seguidos de arquivos grandes e pequenos ou se tá com o mesmo problema que tava a funcao de upload
 void get_file(char *file) {
     int valread;
     int32_t nLeft;
@@ -140,6 +139,17 @@ void get_file(char *file) {
     utime(file_path, &new_times);
 };
 
+void delete_server_file(char *file) {
+    char method[METHODSIZE];
+
+    // Concatenate strings to get method = "DOWNLOAD filename"
+    sprintf(method, "DELETE %s", file);
+
+    // Send to the server
+    write(sock, method, sizeof(method));
+    debug_printf("[%s method sent]\n", method);
+};
+
 void cmdList() {
     int valread;
     int32_t nLeft;
@@ -170,6 +180,7 @@ void cmdMan() {
     printf("list\n");
     printf("download <filename.ext>\n");
     printf("upload <path/filename.ext>\n");
+    printf("delete <filename.ext>\n");
     printf("help\n");
     printf("exit\n\n");
 };
@@ -183,7 +194,6 @@ void sync_client(){
 }
 
 void* sync_daemon(void* unused) {
-  // TODO quando o arquivo é sobrescrito, no final ta adicionando um "UPLOAD filename.ext". Isso aparentemente só acontece qndo o arquivo é sobrescrito. Isso ta acontecendo quando se edita oa rquivo pelo gedit, mas nao pelo vim, aparentemente.
   // TODO nao pode enviar um arquivo que foi recém baixado pelo comando de download. Como fazer isso? Colocá-lo em uma lista e aí antes de enviar percorrer a lista para ver se ele está lá? Se estiver, nao envia pro servidor e o remove da lista.
   // TODO o IN_CLOSE_WRITE nao capta quando um arquivo zip foi modificado?
   int length;
@@ -300,6 +310,10 @@ int main(int argc, char * argv[]) {
             else if (strcmp(token, "download") == 0) {
                 scanf("%s", filename);
                 get_file(filename);
+            }
+            else if (strcmp(token, "delete") == 0) {
+                scanf("%s", filename);
+                delete_server_file(filename);
             }
             else if (strcmp(token, "list") == 0) cmdList();
             else if (strcmp(token, "get_sync_dir") == 0) cmdGetSyncDir();

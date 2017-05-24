@@ -91,16 +91,20 @@ void receive_file(char *file) {
   int32_t nLeft, file_size;
   char buffer[1024] = {0};
   char file_path[256];
-  time_t original_file_time;
+  time_t client_file_time;
   struct utimbuf new_times;
-  int file_i, found_file = 0, first_free_index = -1;
+  int file_i, file_found = -1, first_free_index = -1;
 
   // Search for file in user struct.
-  for(file_i = 0; file_i < MAXFILES && !found_file; file_i++){
-    // Stop if file is found
-    if(strcmp(pClientEntry->file_info[file_i].name, file) == 0)
-      found_file = 1;
-    // Find the next free index
+  for(file_i = 0; file_i < MAXFILES; file_i++){
+    if(strcmp(pClientEntry->file_info[file_i].name, file) == 0){
+      file_found = file_i;
+      break;
+    }
+  }
+
+  // Find the next free index
+  for(file_i = 0; file_i < MAXFILES; file_i++){
     if(pClientEntry->file_info[file_i].size == FREE_FILE_SIZE && first_free_index == -1)
       first_free_index = file_i;
   }
@@ -108,13 +112,13 @@ void receive_file(char *file) {
   sprintf(file_path, "%s/%s", user_sync_dir_path, file);
 
   // Receive original filetime
-  valread = read(sock, &original_file_time, sizeof(original_file_time));
+  valread = read(sock, &client_file_time, sizeof(client_file_time));
 
   // If file already exists and server's version is newer, it's not transfered.
-  if(found_file && (original_file_time < pClientEntry->file_info[file_i].last_modified)){
+  if((file_found >= 0) && (client_file_time < pClientEntry->file_info[file_found].last_modified)){
     printf("Client file is older than server version\n");
   }
-  //FIXME logica tá errada.. vai enviar OK semrpe.. e se nao enviar ok, oq vai acontecer com client?
+  //FIXME logica nao ta bem certa...vai enviar OK semrpe.. e se nao enviar ok, oq vai acontecer com client? acho que nao ta comparandoa timestamp certo..
 
   /* Create file where data will be stored */
   FILE *fp;
@@ -141,20 +145,20 @@ void receive_file(char *file) {
   debug_printf("Fechando arquivo\n");
   fclose (fp);
 
-  new_times.modtime = original_file_time; /* set mtime to original file time */
+  new_times.modtime = client_file_time; /* set mtime to original file time */
   new_times.actime = time(NULL); /* set atime to current time */
   utime(file_path, &new_times);
 
   // If file already exists on client file list
-  if(found_file){
+  if(file_found >= 0){
     // Update
-    pClientEntry->file_info[file_i].size = file_size;
-    pClientEntry->file_info[file_i].last_modified = original_file_time;
+    pClientEntry->file_info[file_found].size = file_size;
+    pClientEntry->file_info[file_found].last_modified = client_file_time;
   } else {
     // If it doesn't, insert it
     strcpy(pClientEntry->file_info[first_free_index].name, file);
     pClientEntry->file_info[first_free_index].size = file_size;
-    pClientEntry->file_info[first_free_index].last_modified = original_file_time;
+    pClientEntry->file_info[first_free_index].last_modified = client_file_time;
   }
 
   // TODO enviar arquivo para o outro dispositivo do usuario caso esteja conectado
@@ -213,6 +217,39 @@ void send_file(char * file) {
   }
 }
 
+void delete_file(char *file) {
+  char file_path[256];
+  int file_i, found_file = 0;
+
+  // Search for file in user struct.
+  for(file_i = 0; file_i < MAXFILES; file_i++){
+    // Stop if file is found
+    if(strcmp(pClientEntry->file_info[file_i].name, file) == 0){
+      found_file = 1;
+      break;
+    }
+  }
+
+  sprintf(file_path, "%s/%s", user_sync_dir_path, file);
+
+  if(found_file){
+    // Set it's area free
+    strcpy(pClientEntry->file_info[file_i].name, "olaaaaaaa.txt");
+    pClientEntry->file_info[file_i].last_modified = time(NULL); // REVIEW set to current time. anything better?
+    pClientEntry->file_info[file_i].size = FREE_FILE_SIZE;
+    // Erase file
+    if (remove(file_path) == 0){
+      printf("File deleted\n");
+    } else {
+      printf("Unable to delete file\n");
+    }
+  } else {
+    printf("File not found\n");
+  }
+
+  // TODO delete from other connected devices
+};
+
 void list_files(){
   char filename_string[MAXNAME];
   int i;
@@ -232,7 +269,7 @@ void list_files(){
 
   // Send filenames
   for (i = 0; i < MAXFILES; i++){
-    if (pClientEntry->file_info[i].size >= 0){
+    if (pClientEntry->file_info[i].size != FREE_FILE_SIZE){
       sprintf(filename_string, "%s\n", pClientEntry->file_info[i].name);
       write(sock, filename_string, strlen(filename_string));
     }
@@ -365,7 +402,10 @@ void *connection_handler(void *socket_desc) {
         } else if (!strncmp(client_message, "UPLOAD", 6)) {
             printf("Request method: UPLOAD\n");
             receive_file(client_message + 7);
-        };
+        } else if (!strncmp(client_message, "DELETE", 6)) {
+            printf("Request method: DELETE\n");
+            delete_file(client_message + 7);
+        }
 	}
 
 	if (read_size == 0) {
