@@ -127,7 +127,7 @@ void receive_file(char *file) {
       printf("Error opening file");
   } else {
     // Send "OK" to confirm file was created and is newer than the server version, so it should be transfered
-    write(sock, "OK", 2); // TODO resolver de outro jeito? Se definisse um tamanho fixo para todas as mensagens, seria só ajustar o write, como fizemos na outra funcao (que usa MIN(nLeft, sizeof(...)))
+    write(sock, "OK", 2); // REVIEW precisa disso ou só colocamos pra resolver o problema que tava acontecendo ao ler o length?
 
     // Receive length
     valread = read(sock, &file_size, sizeof(file_size));

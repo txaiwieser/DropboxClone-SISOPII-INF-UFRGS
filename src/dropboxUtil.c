@@ -21,8 +21,7 @@ void makedir_if_not_exists(const char* path){
   }
 }
 
-// return 0 if exists, -1 otherwise
-int dir_exists(const char* path){
+int file_exists(const char* path){
   struct stat st = {0};
-  return stat(path, &st);
+  return (stat(path, &st) == 0);
 }

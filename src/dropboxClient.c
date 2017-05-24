@@ -98,45 +98,50 @@ void get_file(char *file) {
     time_t original_file_time;
     struct utimbuf new_times;
 
-    // Set saving path to current directory
-    getcwd(cwd, sizeof(cwd));
-    sprintf(file_path, "%s/%s", cwd, file);
+    if(!file_exists(file)){
 
-    // Concatenate strings to get method = "DOWNLOAD filename"
-    sprintf(method, "DOWNLOAD %s", file);
+      // Set saving path to current directory
+      getcwd(cwd, sizeof(cwd));
+      sprintf(file_path, "%s/%s", cwd, file);
 
-    // Send to the server
-    write(sock, method, sizeof(method));
-    debug_printf("[%s method sent]\n", method);
+      // Concatenate strings to get method = "DOWNLOAD filename"
+      sprintf(method, "DOWNLOAD %s", file);
 
-    // TODO If file doesn't exist on server, return an error message.
+      // Send to the server
+      write(sock, method, sizeof(method));
+      debug_printf("[%s method sent]\n", method);
 
-    /* Create file where data will be stored */
-    FILE *fp;
-    fp = fopen(file_path, "wb");
-    if (NULL == fp) {
-        printf("Error opening file");
+      // TODO If file doesn't exist on server, return an error message.
+
+      /* Create file where data will be stored */
+      FILE *fp;
+      fp = fopen(file_path, "wb");
+      if (NULL == fp) {
+          printf("Error opening file");
+      } else {
+        // Receive length
+        valread = read(sock, &nLeft, sizeof(nLeft));
+        nLeft = ntohl(nLeft);
+
+        /* Receive data in chunks */
+        while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
+          fwrite(buffer, 1, valread, fp);
+          nLeft -= valread;
+        }
+        if (valread < 0) {
+            printf("\n Read Error \n");
+        }
+      }
+      fclose (fp);
+
+      // Set modtime to original file modtime
+      valread = read(sock, &original_file_time, sizeof(time_t));
+      new_times.modtime = original_file_time; /* set mtime to original file time */
+      new_times.actime = time(NULL); /* set atime to current time */
+      utime(file_path, &new_times);
     } else {
-      // Receive length
-      valread = read(sock, &nLeft, sizeof(nLeft));
-      nLeft = ntohl(nLeft);
-
-      /* Receive data in chunks */
-      while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
-        fwrite(buffer, 1, valread, fp);
-        nLeft -= valread;
-      }
-      if (valread < 0) {
-          printf("\n Read Error \n");
-      }
+      printf("There's already a file named %s in this directory\n", file);
     }
-    fclose (fp);
-
-    // Set modtime to original file modtime
-    valread = read(sock, &original_file_time, sizeof(time_t));
-    new_times.modtime = original_file_time; /* set mtime to original file time */
-    new_times.actime = time(NULL); /* set atime to current time */
-    utime(file_path, &new_times);
 };
 
 void delete_server_file(char *file) {
@@ -194,8 +199,7 @@ void sync_client(){
 }
 
 void* sync_daemon(void* unused) {
-  // TODO nao pode enviar um arquivo que foi recém baixado pelo comando de download. Como fazer isso? Colocá-lo em uma lista e aí antes de enviar percorrer a lista para ver se ele está lá? Se estiver, nao envia pro servidor e o remove da lista.
-  // TODO o IN_CLOSE_WRITE nao capta quando um arquivo zip foi modificado?
+  // REVIEW as I could see IN_CLOSE_WRITE doesn't trigger when a .zip file is modified. Is there any way to fix this?
   int length;
   int fd;
   int wd;
