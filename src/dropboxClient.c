@@ -36,7 +36,7 @@ void send_file(char *file) {
 
     stat_result = stat(file, &st);
 
-    if (stat_result == 0) { // If file exists
+    if (stat_result == 0 && S_ISREG(st.st_mode)) { // If file exists 
       /* Open the file that we wish to transfer */
       FILE *fp = fopen(file,"rb");
       if (fp == NULL) {
