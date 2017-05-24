@@ -1,6 +1,8 @@
 #include "dropboxUtil.h"
 
-#define MAXFILES 100
+#define MAXFILES 200
+
+#define FREE_FILE_SIZE -1
 
 typedef struct file_info {
   char name[MAXNAME]; // refere-se ao nome do arquivo, incluindo a extensão

@@ -88,22 +88,21 @@ void sync_server() {
 
 void receive_file(char *file) {
   int valread;
-  int32_t nLeft;
+  int32_t nLeft, file_size;
   char buffer[1024] = {0};
   char file_path[256];
   time_t original_file_time;
   struct utimbuf new_times;
-  int i, found_file = 0, first_free_index = -1;
+  int file_i, found_file = 0, first_free_index = -1;
 
   // Search for file in user struct.
-  for(i = 0; i < MAXFILES && !found_file; i++){
+  for(file_i = 0; file_i < MAXFILES && !found_file; file_i++){
     // Stop if file is found
-    if(strcmp(pClientEntry->file_info[i].name, file) == 0)
+    if(strcmp(pClientEntry->file_info[file_i].name, file) == 0)
       found_file = 1;
-
-    // FIXME first_free_index ta ficando sempre -1
-    if(pClientEntry->file_info[i].name == NULL && first_free_index == -1)
-      first_free_index = i;
+    // Find the next free index
+    if(pClientEntry->file_info[file_i].size == FREE_FILE_SIZE && first_free_index == -1)
+      first_free_index = file_i;
   }
 
   // TODO comparar timestamp. se mais antigo q a versao do servidor, nao atualizar.
@@ -120,8 +119,8 @@ void receive_file(char *file) {
     write(sock, "OK", 2); // TODO resolver de outro jeito?
 
     // Receive length
-    valread = read(sock, &nLeft, sizeof(nLeft));
-    nLeft = ntohl(nLeft);
+    valread = read(sock, &file_size, sizeof(file_size));
+    nLeft = ntohl(file_size);
 
     /* Receive data in chunks */
     while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
@@ -136,16 +135,21 @@ void receive_file(char *file) {
   fclose (fp);
 
   // Set modtime to original file modtime
-  valread = read(sock, &original_file_time, sizeof(time_t));
+  valread = read(sock, &original_file_time, sizeof(original_file_time));
   new_times.modtime = original_file_time; /* set mtime to original file time */
   new_times.actime = time(NULL); /* set atime to current time */
   utime(file_path, &new_times);
 
   // If file already exists on client file list
   if(found_file){
-    // TODO atualiza os dados do arquivo
+    // Update
+    pClientEntry->file_info[file_i].size = file_size;
+    pClientEntry->file_info[file_i].last_modified = original_file_time;
   } else {
-    // TODO insere no primeiro slot livre
+    // If it doesn't, insert it
+    strcpy(pClientEntry->file_info[first_free_index].name, file);
+    pClientEntry->file_info[first_free_index].size = file_size;
+    pClientEntry->file_info[first_free_index].last_modified = original_file_time;
   }
 };
 
@@ -203,34 +207,29 @@ void send_file(char * file) {
 }
 
 void list_files(){
-  // TODO em vez de escanear o diretorio, deve pegar os arquivos da struct
-  char filename_string[256];
-  struct dirent **namelist;
-  int i, n;
+  char filename_string[MAXNAME];
+  int i;
   int32_t nList = 0, nListConverted;
 
   printf("<~ %s requested LIST\n", username);
 
   // List files
-  n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
-  if (n > 2) { // Starting in i=2, it doesn't show '.' and '..'
-      for (i = 2; i < n; i++) {
-        nList += strlen(namelist[i]->d_name) + 1;
-      }
-      // Send length
-      nListConverted = htonl(nList);
-      write(sock, &nListConverted, sizeof(nListConverted));
-      for (i = 2; i < n; i++) {
-          sprintf(filename_string, "%s\n", namelist[i]->d_name);
-          write(sock, filename_string, strlen(filename_string));
-          free(namelist[i]);
-      }
-  } else {
-      perror("Couldn't open the directory or it's empty");
-      nListConverted = htonl(0);
-      write(sock, &nListConverted, sizeof(nListConverted));
+  for (i = 0; i < MAXFILES; i++){
+    if (pClientEntry->file_info[i].size != FREE_FILE_SIZE)
+      nList += strlen(pClientEntry->file_info[i].name) + 1;
   }
-  free(namelist);
+
+  // Send length
+  nListConverted = htonl(nList);
+  write(sock, &nListConverted, sizeof(nListConverted));
+
+  // Send filenames
+  for (i = 0; i < MAXFILES; i++){
+    if (pClientEntry->file_info[i].size >= 0){
+      sprintf(filename_string, "%s\n", pClientEntry->file_info[i].name);
+      write(sock, filename_string, strlen(filename_string));
+    }
+  }
 }
 
 void free_device(){
@@ -313,6 +312,12 @@ void *connection_handler(void *socket_desc) {
     client_node->client_entry.devices[1] = -1;
     strcpy(client_node->client_entry.userid, username);
     client_node->client_entry.logged_in = 1;
+
+    // Set size to -1 for all the files, so we can check if a slot is free later
+    // REVIEW any better way to solve this?
+    for (i = 0; i < MAXFILES; i++){
+      client_node->client_entry.file_info[i].size = FREE_FILE_SIZE;
+    }
 
     // Insert data into struct file_info
     n = scandir(user_sync_dir_path, &namelist, 0, alphasort);

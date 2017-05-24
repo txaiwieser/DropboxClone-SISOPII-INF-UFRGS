@@ -83,6 +83,8 @@ void send_file(char *file) {
       // Send file modtime
       // TODO use htonl and ntohl?
       write(sock, &st.st_mtime, sizeof(st.st_mtime));
+
+      // TODO enviar arquivo para o outro dispositivo do usuario caso esteja conectado
     } else {
       printf("File doesn't exist! Pass a valid filename.\n");
     }
