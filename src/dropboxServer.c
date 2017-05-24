@@ -285,7 +285,9 @@ void free_device(){
       // Set current sock device free
       if (client_node->client_entry.devices[0] == sock) {
         client_node->client_entry.devices[0] = -1;
+        client_node->client_entry.devices[0] = -1;
       } else if (client_node->client_entry.devices[1] == sock) {
+        client_node->client_entry.devices[1] = -1;
         client_node->client_entry.devices[1] = -1;
       }
 
@@ -305,6 +307,7 @@ void *connection_handler(void *socket_desc) {
 	// Get the socket descriptor
 	sock = *(int *) socket_desc;
 	int read_size;
+  uint16_t client_server_port;
 	char client_message[METHODSIZE];
   struct tailq_entry *client_node;
   struct tailq_entry *tmp_client_node;
@@ -387,6 +390,11 @@ void *connection_handler(void *socket_desc) {
 
   // Send "OK" to confirm connection was accepted.
   write(sock, "OK", 2);
+
+  // Receive client's local server port
+  read_size = recv(sock, &client_server_port, sizeof(client_server_port), 0);
+  client_server_port = ntohs(client_server_port);
+  debug_printf("Client's local server port: %d\n", client_server_port);
 
 	// Receive a message from client
 	while ((read_size = recv(sock, client_message, METHODSIZE, 0)) > 0 ) {

@@ -12,6 +12,7 @@ typedef struct file_info {
 
 typedef struct client {
   int devices[2]; // associado aos dispositivos do usuário
+  int devices_server[2]; // socket 'servidor' do cliente  // REVIEW explicar isso melhor
   char userid[MAXNAME]; // id do usuário no servidor, que deverá ser único. Informado pela linha de comando.
   FILE_INFO_t file_info[MAXFILES];  // metadados de cada arquivo que o cliente possui no servidor
   int logged_in;  // cliente está logado ou não
