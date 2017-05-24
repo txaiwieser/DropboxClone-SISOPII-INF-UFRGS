@@ -249,8 +249,57 @@ void* sync_daemon(void* unused) {
   ( void ) close( fd );
 
   exit( 0 );
+}
 
-  //TODO verificar se essa thread está fechando quando a main é encerrada
+// This thread receives 'push file' requests from server
+void* local_server(void* unused) {
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+    uint16_t port_converted;
+
+    // Creating socket file descriptor
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = 0; // auto assign port // REVIEW check bind return to confirm it succeded https://stackoverflow.com/questions/10294515/how-do-i-find-in-c-that-a-port-is-free-to-use
+
+    // Forcefully attaching socket to the port
+    if (bind(server_fd, (struct sockaddr *) &address, sizeof(address)) < 0) {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+    }
+    if (listen(server_fd, 3) < 0) { // REVIEW Is 3 the best value for backlog (2nd parameter)?
+        perror("listen");
+        exit(EXIT_FAILURE);
+    }
+
+    socklen_t len = sizeof(address);
+    if (getsockname(server_fd, (struct sockaddr *)&address, &len) == -1) {
+        perror("getsockname");
+        exit(EXIT_FAILURE);
+    }
+
+    // Send local_server port to the server
+    port_converted = address.sin_port;
+    write(sock, &port_converted, sizeof(port_converted));
+
+    // Accept and incoming connection
+    addrlen = sizeof(struct sockaddr_in);
+    while ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen))) {
+        //puts("Connection accepted. Handler assigned");
+        // TODO listen to the push request
+
+    }
+    if (new_socket < 0) {
+        perror("accept failed");
+    }
+
+    exit(0);
 }
 
 int main(int argc, char * argv[]) {
@@ -296,7 +345,12 @@ int main(int argc, char * argv[]) {
     debug_printf("[Connection established]\n");
 
     if (pthread_create(&thread_id, NULL, sync_daemon, NULL) < 0) {
-        perror("could not create sync_client thread");
+        perror("could not create inotify thread");
+        return 1;
+    }
+
+    if (pthread_create(&thread_id, NULL, local_server, NULL) < 0) {
+        perror("could not create local_server thread");
         return 1;
     }
 
