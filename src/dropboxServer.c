@@ -105,9 +105,16 @@ void receive_file(char *file) {
       first_free_index = file_i;
   }
 
-  // TODO comparar timestamp. se mais antigo q a versao do servidor, nao atualizar.
-
   sprintf(file_path, "%s/%s", user_sync_dir_path, file);
+
+  // Receive original filetime
+  valread = read(sock, &original_file_time, sizeof(original_file_time));
+
+  // If file already exists and server's version is newer, it's not transfered.
+  if(found_file && (original_file_time < pClientEntry->file_info[file_i].last_modified)){
+    printf("Client file is older than server version\n");
+  }
+  //FIXME logica tá errada.. vai enviar OK semrpe.. e se nao enviar ok, oq vai acontecer com client?
 
   /* Create file where data will be stored */
   FILE *fp;
@@ -115,8 +122,8 @@ void receive_file(char *file) {
   if (NULL == fp) {
       printf("Error opening file");
   } else {
-    // Send "OK" to confirm file was created and should be transfered
-    write(sock, "OK", 2); // TODO resolver de outro jeito?
+    // Send "OK" to confirm file was created and is newer than the server version, so it should be transfered
+    write(sock, "OK", 2); // TODO resolver de outro jeito? Se definisse um tamanho fixo para todas as mensagens, seria só ajustar o write, como fizemos na outra funcao (que usa MIN(nLeft, sizeof(...)))
 
     // Receive length
     valread = read(sock, &file_size, sizeof(file_size));
@@ -134,8 +141,6 @@ void receive_file(char *file) {
   debug_printf("Fechando arquivo\n");
   fclose (fp);
 
-  // Set modtime to original file modtime
-  valread = read(sock, &original_file_time, sizeof(original_file_time));
   new_times.modtime = original_file_time; /* set mtime to original file time */
   new_times.actime = time(NULL); /* set atime to current time */
   utime(file_path, &new_times);
@@ -151,6 +156,8 @@ void receive_file(char *file) {
     pClientEntry->file_info[first_free_index].size = file_size;
     pClientEntry->file_info[first_free_index].last_modified = original_file_time;
   }
+
+  // TODO enviar arquivo para o outro dispositivo do usuario caso esteja conectado
 };
 
 void send_file(char * file) {
@@ -261,7 +268,7 @@ void *connection_handler(void *socket_desc) {
 	// Get the socket descriptor
 	sock = *(int *) socket_desc;
 	int read_size;
-	char client_message[1024];
+	char client_message[METHODSIZE];
   struct tailq_entry *client_node;
   struct tailq_entry *tmp_client_node;
   int *nullReturn = NULL;
@@ -345,7 +352,7 @@ void *connection_handler(void *socket_desc) {
   write(sock, "OK", 2);
 
 	// Receive a message from client
-	while ((read_size = recv(sock, client_message, sizeof(client_message), 0)) > 0 ) {
+	while ((read_size = recv(sock, client_message, METHODSIZE, 0)) > 0 ) {
 		// end of string marker
 		client_message[read_size] = '\0';
 

@@ -28,7 +28,7 @@ char user_sync_dir_path[256];
 // TODO Handle errors on send_file, get_file, receive_file (on server), send_file (on server). If file can't be opened, it should return an error and exit. Also, display success messages.
 void send_file(char *file) {
     int stat_result;
-    char method[160];
+    char method[METHODSIZE];
     struct stat st;
     char buffer[1024] = {0};
     int valread;
@@ -46,10 +46,13 @@ void send_file(char *file) {
           sprintf(method, "UPLOAD %s", basename(file));
 
           // Call to the server
-          send(sock, method, strlen(method), 0);
+          write(sock, method, sizeof(method)); // REVIEW Usando sizeof funciona, mas usando strlen dá bug a partir do segundo arquvio. tá certo? (atencao, se alterar, nao esquecer de mudar nas outras funcoes q fazem exatamente a mesma coisa)
           debug_printf("[%s method sent]\n", method);
 
-          // Detect if file was created and can be transfered
+          // Send file modtime
+          write(sock, &st.st_mtime, sizeof(st.st_mtime)); // TODO use htonl and ntohl?
+
+          // Detect if file was created and local version is newer than server version, so file must be transfered
           valread = read(sock, buffer, sizeof(buffer));
           if (valread > 0) {
             /* Send file size to server */
@@ -80,11 +83,6 @@ void send_file(char *file) {
           }
       }
       fclose(fp);
-      // Send file modtime
-      // TODO use htonl and ntohl?
-      write(sock, &st.st_mtime, sizeof(st.st_mtime));
-
-      // TODO enviar arquivo para o outro dispositivo do usuario caso esteja conectado
     } else {
       printf("File doesn't exist! Pass a valid filename.\n");
     }
@@ -95,7 +93,7 @@ void get_file(char *file) {
     int valread;
     int32_t nLeft;
     char buffer[1024] = {0};
-    char method[160];
+    char method[METHODSIZE];
     char file_path[256];
     char cwd[256];
     time_t original_file_time;
@@ -109,7 +107,7 @@ void get_file(char *file) {
     sprintf(method, "DOWNLOAD %s", file);
 
     // Send to the server
-    send(sock, method, strlen(method), 0);
+    write(sock, method, sizeof(method));
     debug_printf("[%s method sent]\n", method);
 
     // TODO If file doesn't exist on server, return an error message.

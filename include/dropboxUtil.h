@@ -1,5 +1,5 @@
 #define MAXNAME 255
-
+#define METHODSIZE 256
 #define DEBUG 1
 
 #define MIN(a,b) (a < b)? a : b
