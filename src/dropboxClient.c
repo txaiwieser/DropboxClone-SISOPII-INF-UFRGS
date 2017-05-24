@@ -199,6 +199,7 @@ void sync_client(){
 }
 
 void* sync_daemon(void* unused) {
+  // TODO when a file is deleted on file explorer it doesn't trigger, but if I do a 'rm filename.ext' on terminal it works...
   // REVIEW as I could see IN_CLOSE_WRITE doesn't trigger when a .zip file is modified. Is there any way to fix this?
   int length;
   int fd;
@@ -212,7 +213,9 @@ void* sync_daemon(void* unused) {
   }
 
   wd = inotify_add_watch( fd, user_sync_dir_path,
-                         IN_CLOSE_WRITE ); // TODO se arquivo for removido tem que apagá-lo no servidor. Se for renomeado, tem que renomeá-lo no servidor.
+                         IN_CLOSE_WRITE | IN_DELETE );
+
+  // TODO testar renomeação
 
   while (1) {
     int i = 0;
@@ -227,13 +230,14 @@ void* sync_daemon(void* unused) {
     while ( i < length ) {
       struct inotify_event *event = ( struct inotify_event * ) &buffer[ i ];
       if ( event->len ) {
-          if ( !(event->mask & IN_ISDIR) ) {
+          if ( !(event->mask & IN_ISDIR) && event->name[0] != '.' ) { // If it's a file and it's not hidden
               if ( event->mask & IN_CLOSE_WRITE  ) {
-                  if ( event->name[0] != '.' ) { // If it's not a hidden file
-                      debug_printf( "The file %s was created or modified.\n", event->name );
-                      sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
-                      send_file(filepath);
-                  }
+                  debug_printf( "The file %s was created or modified.\n", event->name );
+                  sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
+                  send_file(filepath);
+              } else if ( event->mask & IN_DELETE  ) {
+                  debug_printf( "The file %s was deleted.\n", event->name );
+                  delete_server_file(event->name);
               }
           }
       }
