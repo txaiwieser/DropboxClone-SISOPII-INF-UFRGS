@@ -173,7 +173,7 @@ void send_file(char * file) {
   sprintf(file_path, "%s/%s", user_sync_dir_path, file);
   stat_result = stat(file_path, &st);
 
-  if (stat_result == 0) { // If file exists
+  if (stat_result == 0 && S_ISREG(st.st_mode)) { // If file exists
     /* Open the file that we wish to transfer */
     FILE *fp = fopen(file_path,"rb");
     if (fp == NULL) {

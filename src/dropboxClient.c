@@ -36,7 +36,7 @@ void send_file(char *file) {
 
     stat_result = stat(file, &st);
 
-    if (stat_result == 0) { // If file exists
+    if (stat_result == 0 && S_ISREG(st.st_mode)) { // If file exists
       /* Open the file that we wish to transfer */
       FILE *fp = fopen(file,"rb");
       if (fp == NULL) {
@@ -199,8 +199,6 @@ void sync_client(){
 }
 
 void* sync_daemon(void* unused) {
-  // TODO when a file is deleted on file explorer it doesn't trigger, but if I do a 'rm filename.ext' on terminal it works...
-  // REVIEW as I could see IN_CLOSE_WRITE doesn't trigger when a .zip file is modified. Is there any way to fix this?
   int length;
   int fd;
   int wd;
@@ -213,7 +211,7 @@ void* sync_daemon(void* unused) {
   }
 
   wd = inotify_add_watch( fd, user_sync_dir_path,
-                         IN_CLOSE_WRITE | IN_DELETE );
+                         IN_CLOSE_WRITE | IN_MOVE | IN_DELETE );
 
   // TODO testar renomeação
 
@@ -231,19 +229,23 @@ void* sync_daemon(void* unused) {
       struct inotify_event *event = ( struct inotify_event * ) &buffer[ i ];
       if ( event->len ) {
           if ( !(event->mask & IN_ISDIR) && event->name[0] != '.' ) { // If it's a file and it's not hidden
-              if ( event->mask & IN_CLOSE_WRITE  ) {
-                  debug_printf( "The file %s was created or modified.\n", event->name );
+              if ( (event->mask & IN_CLOSE_WRITE) || (event->mask & IN_MOVED_TO)  ) {
+                  debug_printf( "The file %s was created, modified, or moved from somewhere.\n", event->name );
                   sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
                   send_file(filepath);
               } else if ( event->mask & IN_DELETE  ) {
                   debug_printf( "The file %s was deleted.\n", event->name );
+                  delete_server_file(event->name);
+              } else if ( event->mask & IN_MOVED_FROM  ) {
+                  debug_printf( "The file %s was renamed.\n", event->name );
+                  sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
                   delete_server_file(event->name);
               }
           }
       }
       i += EVENT_SIZE + event->len;
     }
-    // sleep(10); // TODO sleep for 10 seconds?
+    sleep(3); // REVIEW adjust sleep time
   }
   ( void ) inotify_rm_watch( fd, wd );
   ( void ) close( fd );
