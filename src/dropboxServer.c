@@ -90,10 +90,11 @@ void receive_file(char *file) {
   int valread;
   int32_t nLeft, file_size;
   char buffer[1024] = {0};
+  char method[METHODSIZE];
   char file_path[256];
   time_t client_file_time;
   struct utimbuf new_times;
-  int file_i, file_found = -1, first_free_index = -1;
+  int file_i, file_found = -1, first_free_index = -1, i;
 
   // Search for file in user struct.
   for(file_i = 0; file_i < MAXFILES; file_i++){
@@ -161,7 +162,14 @@ void receive_file(char *file) {
     pClientEntry->file_info[first_free_index].last_modified = client_file_time;
   }
 
-  // TODO enviar arquivo para o outro dispositivo do usuario caso esteja conectado
+  // Send file to other connected devices of client
+  for(i = 0; i < MAXDEVICES; i++ ){
+    if(pClientEntry->devices[i] != -1 && pClientEntry->devices[i] != sock){
+      sprintf(method, "PUSH %s", file);
+      write(pClientEntry->devices_server[i], method, sizeof(method));
+    }
+  }
+  // REVIEW tem que checar timestamp dos arquivos nos outros dispositivos antes de enviar pra eles? achoq nao, mas tem que confirmar isso e testar bem
 };
 
 void send_file(char * file) {
@@ -285,10 +293,10 @@ void free_device(){
       // Set current sock device free
       if (client_node->client_entry.devices[0] == sock) {
         client_node->client_entry.devices[0] = -1;
-        client_node->client_entry.devices[0] = -1;
+        client_node->client_entry.devices_server[0] = -1;
       } else if (client_node->client_entry.devices[1] == sock) {
         client_node->client_entry.devices[1] = -1;
-        client_node->client_entry.devices[1] = -1;
+        client_node->client_entry.devices_server[1] = -1; // TODO create constants
       }
 
       // Set logged_in to 0 if user is not connected anymore in any device.
@@ -314,6 +322,7 @@ void *connection_handler(void *socket_desc) {
   int *nullReturn = NULL;
   struct dirent **namelist;
   int i, n;
+  int device_to_use;
   struct stat st;
   char file_path[256];
 
@@ -344,7 +353,7 @@ void *connection_handler(void *socket_desc) {
       pthread_exit(nullReturn);
     }
     // If it's connected only in one device, connect the second device.
-    int device_to_use = (client_node->client_entry.devices[0] < 0) ? 0 : 1;
+    device_to_use = (client_node->client_entry.devices[0] < 0) ? 0 : 1;
     client_node->client_entry.devices[device_to_use] = sock;
   }
   // If it's not found, it's not connected, so it need to be added to the client list.
@@ -355,6 +364,7 @@ void *connection_handler(void *socket_desc) {
       pthread_exit(nullReturn);
   	}
 
+    device_to_use = 0;
     client_node->client_entry.devices[0] = sock;
     client_node->client_entry.devices[1] = -1;
     strcpy(client_node->client_entry.userid, username);
@@ -379,9 +389,9 @@ void *connection_handler(void *socket_desc) {
 
           free(namelist[i]);
         }
-    } else {
-        perror("Couldn't open the directory or it's empty"); // TODO remove?
-    }
+    } /*else {
+        perror("Couldn't open the directory or it's empty"); // REVIEW handle error?
+    }*/
     free(namelist);
 
     TAILQ_INSERT_TAIL(&my_tailq_head, client_node, entries);
@@ -396,7 +406,11 @@ void *connection_handler(void *socket_desc) {
   client_server_port = ntohs(client_server_port);
   debug_printf("Client's local server port: %d\n", client_server_port);
 
-	// Receive a message from client
+  // Connect to client's server
+  char client_server[] = "localhost";  // TODO get right hostname
+  client_node->client_entry.devices_server[device_to_use] = connect_server(client_server, client_server_port);
+
+	// Receive requests from client
 	while ((read_size = recv(sock, client_message, METHODSIZE, 0)) > 0 ) {
 		// end of string marker
 		client_message[read_size] = '\0';

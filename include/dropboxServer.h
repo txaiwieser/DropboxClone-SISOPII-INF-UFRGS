@@ -1,6 +1,7 @@
 #include "dropboxUtil.h"
 
 #define MAXFILES 200
+#define MAXDEVICES 2
 
 #define FREE_FILE_SIZE -1
 
@@ -11,8 +12,8 @@ typedef struct file_info {
 } FILE_INFO_t;
 
 typedef struct client {
-  int devices[2]; // associado aos dispositivos do usuário
-  int devices_server[2]; // socket 'servidor' do cliente  // REVIEW explicar isso melhor
+  int devices[MAXDEVICES]; // associado aos dispositivos do usuário
+  int devices_server[MAXDEVICES]; // socket 'servidor' do cliente  // REVIEW explicar isso melhor
   char userid[MAXNAME]; // id do usuário no servidor, que deverá ser único. Informado pela linha de comando.
   FILE_INFO_t file_info[MAXFILES];  // metadados de cada arquivo que o cliente possui no servidor
   int logged_in;  // cliente está logado ou não

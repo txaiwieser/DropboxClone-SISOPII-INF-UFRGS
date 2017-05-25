@@ -88,21 +88,19 @@ void send_file(char *file) {
     }
 }
 
-void get_file(char *file) {
+void get_file(char *file, char *path) {
     int valread;
     int32_t nLeft;
     char buffer[1024] = {0};
     char method[METHODSIZE];
     char file_path[256];
-    char cwd[256];
     time_t original_file_time;
     struct utimbuf new_times;
 
     if(!file_exists(file)){
 
       // Set saving path to current directory
-      getcwd(cwd, sizeof(cwd));
-      sprintf(file_path, "%s/%s", cwd, file);
+      sprintf(file_path, "%s/%s", path, file);
 
       // Concatenate strings to get method = "DOWNLOAD filename"
       sprintf(method, "DOWNLOAD %s", file);
@@ -199,6 +197,7 @@ void sync_client(){
 }
 
 void* sync_daemon(void* unused) {
+  // TODO Não enviar arquivo se ele foi recém baixado. Por exemplo, quando o servidor manda um PUSH pro cliente, este baixa o arquivo e aí o inotify acha que o arquivo foi criado, entao tenta enviá-lo ao servidor, que por sua vez envia push de novo.. ? Testar melhor. Talvez está faltando comparar timestamp na hora de receber um arquivo no servidor?
   int length;
   int fd;
   int wd;
@@ -259,6 +258,8 @@ void* local_server(void* unused) {
     struct sockaddr_in address;
     int addrlen = sizeof(address);
     uint16_t port_converted;
+    int read_size;
+    char server_message[METHODSIZE];
 
     // Creating socket file descriptor
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
@@ -294,7 +295,19 @@ void* local_server(void* unused) {
     addrlen = sizeof(struct sockaddr_in);
     while ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen))) {
         //puts("Connection accepted. Handler assigned");
-        // TODO listen to the push request
+
+        // Receive a message from server
+      	while ((read_size = recv(new_socket, server_message, METHODSIZE, 0)) > 0 ) {
+      		// end of string marker
+      		server_message[read_size] = '\0';
+
+              // TODO PULL method? (maybe another name...)
+              // TODO DELETE method (to only delete local file)
+              if (!strncmp(server_message, "PUSH", 4)) {
+                  printf("received PUSH from server\n");
+                  get_file(server_message + 5, user_sync_dir_path);
+              }
+      	}
 
     }
     if (new_socket < 0) {
@@ -373,7 +386,9 @@ int main(int argc, char * argv[]) {
             }
             else if (strcmp(token, "download") == 0) {
                 scanf("%s", filename);
-                get_file(filename);
+                char cwd[256];
+                getcwd(cwd, sizeof(cwd));
+                get_file(filename, cwd);
             }
             else if (strcmp(token, "delete") == 0) {
                 scanf("%s", filename);
@@ -386,37 +401,6 @@ int main(int argc, char * argv[]) {
         }
     }
     return 0;
-}
-
-int connect_server(char * host, int port) {
-    int sock = 0;
-    struct sockaddr_in serv_addr;
-    struct hostent *server;
-
-    server = gethostbyname(host);
-    if (server == NULL) {
-        printf("ERROR, no such host\n");
-        return -1;
-    }
-
-    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        printf("\n Socket creation error \n");
-        return -1;
-    }
-
-    memset(&serv_addr, '0', sizeof(serv_addr));
-
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(port);
-    serv_addr.sin_addr = *((struct in_addr *) server->h_addr);
-    bzero(&(serv_addr.sin_zero), 8);
-
-    if (connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
-        printf("\nConnection Failed. \n");
-        return -1;
-    }
-
-    return sock;
 }
 
 void close_connection() {

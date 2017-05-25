@@ -8,5 +8,8 @@ void debug_printf(const char* message, ...);
 
 void makedir_if_not_exists(const char* path);
 
+int connect_server(char * host, int port);
+
 int dir_exists(const char* path);
+
 int file_exists(const char* path);
