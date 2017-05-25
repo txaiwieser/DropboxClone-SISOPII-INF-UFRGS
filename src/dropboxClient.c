@@ -37,54 +37,54 @@ void send_file(char *file) {
     stat_result = stat(file, &st);
 
     if (stat_result == 0 && S_ISREG(st.st_mode)) { // If file exists
-      /* Open the file that we wish to transfer */
-      FILE *fp = fopen(file,"rb");
-      if (fp == NULL) {
-        printf("Couldn't open the file\n");
-      } else {
-          // Concatenate strings to get method = "UPLOAD filename"
-          sprintf(method, "UPLOAD %s", basename(file));
+        /* Open the file that we wish to transfer */
+        FILE *fp = fopen(file,"rb");
+        if (fp == NULL) {
+            printf("Couldn't open the file\n");
+        } else {
+            // Concatenate strings to get method = "UPLOAD filename"
+            sprintf(method, "UPLOAD %s", basename(file));
 
-          // Call to the server
-          write(sock, method, sizeof(method)); // REVIEW Usando sizeof funciona, mas usando strlen dá bug a partir do segundo arquvio. tá certo? (atencao, se alterar, nao esquecer de mudar nas outras funcoes q fazem exatamente a mesma coisa)
-          debug_printf("[%s method sent]\n", method);
+            // Call to the server
+            write(sock, method, sizeof(method)); // REVIEW Usando sizeof funciona, mas usando strlen dá bug a partir do segundo arquvio. tá certo? (atencao, se alterar, nao esquecer de mudar nas outras funcoes q fazem exatamente a mesma coisa)
+            debug_printf("[%s method sent]\n", method);
 
-          // Send file modtime
-          write(sock, &st.st_mtime, sizeof(st.st_mtime)); // TODO use htonl and ntohl?
+            // Send file modtime
+            write(sock, &st.st_mtime, sizeof(st.st_mtime)); // TODO use htonl and ntohl?
 
-          // Detect if file was created and local version is newer than server version, so file must be transfered
-          valread = read(sock, buffer, sizeof(buffer));
-          if (valread > 0) {
-            /* Send file size to server */
-            length_converted = htonl(st.st_size);
-            write(sock, &length_converted, sizeof(length_converted));
+            // Detect if file was created and local version is newer than server version, so file must be transfered
+            valread = read(sock, buffer, sizeof(buffer));
+            if (valread > 0) {
+                /* Send file size to server */
+                length_converted = htonl(st.st_size);
+                write(sock, &length_converted, sizeof(length_converted));
 
-            /* Read data from file and send it */
-            while (1) {
-                /* First read file in chunks of 1024 bytes */
-                unsigned char buff[1024] = {0};
-                int nread = fread(buff, 1, sizeof(buff), fp);
+                /* Read data from file and send it */
+                while (1) {
+                    /* First read file in chunks of 1024 bytes */
+                    unsigned char buff[1024] = {0};
+                    int nread = fread(buff, 1, sizeof(buff), fp);
 
-                /* If read was success, send data. */
-                if (nread > 0) {
-                    write(sock, buff, nread);
-                }
-
-                /* Either there was error, or reached end of file */
-                if (nread < sizeof(buff)) {
-                    /*if (feof(fp))
-                        debug_printf("End of file\n"); */
-                    if (ferror(fp)) {
-                        printf("Error reading\n");
+                    /* If read was success, send data. */
+                    if (nread > 0) {
+                        write(sock, buff, nread);
                     }
-                    break;
+
+                    /* Either there was error, or reached end of file */
+                    if (nread < sizeof(buff)) {
+                        /*if (feof(fp))
+                            debug_printf("End of file\n"); */
+                        if (ferror(fp)) {
+                            printf("Error reading\n");
+                        }
+                        break;
+                    }
                 }
             }
-          }
-      }
-      fclose(fp);
+        }
+        fclose(fp);
     } else {
-      printf("File doesn't exist! Pass a valid filename.\n");
+        printf("File doesn't exist! Pass a valid filename.\n");
     }
 }
 
@@ -97,48 +97,48 @@ void get_file(char *file, char *path) {
     time_t original_file_time;
     struct utimbuf new_times;
 
-    if(!file_exists(file)){
+    if(!file_exists(file)) {
 
-      // Set saving path to current directory
-      sprintf(file_path, "%s/%s", path, file);
+        // Set saving path to current directory
+        sprintf(file_path, "%s/%s", path, file);
 
-      // Concatenate strings to get method = "DOWNLOAD filename"
-      sprintf(method, "DOWNLOAD %s", file);
+        // Concatenate strings to get method = "DOWNLOAD filename"
+        sprintf(method, "DOWNLOAD %s", file);
 
-      // Send to the server
-      write(sock, method, sizeof(method));
-      debug_printf("[%s method sent]\n", method);
+        // Send to the server
+        write(sock, method, sizeof(method));
+        debug_printf("[%s method sent]\n", method);
 
-      // TODO If file doesn't exist on server, return an error message.
+        // TODO If file doesn't exist on server, return an error message.
 
-      /* Create file where data will be stored */
-      FILE *fp;
-      fp = fopen(file_path, "wb");
-      if (NULL == fp) {
-          printf("Error opening file");
-      } else {
-        // Receive length
-        valread = read(sock, &nLeft, sizeof(nLeft));
-        nLeft = ntohl(nLeft);
+        /* Create file where data will be stored */
+        FILE *fp;
+        fp = fopen(file_path, "wb");
+        if (NULL == fp) {
+            printf("Error opening file");
+        } else {
+            // Receive length
+            valread = read(sock, &nLeft, sizeof(nLeft));
+            nLeft = ntohl(nLeft);
 
-        /* Receive data in chunks */
-        while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
-          fwrite(buffer, 1, valread, fp);
-          nLeft -= valread;
+            /* Receive data in chunks */
+            while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
+                fwrite(buffer, 1, valread, fp);
+                nLeft -= valread;
+            }
+            if (valread < 0) {
+                printf("\n Read Error \n");
+            }
         }
-        if (valread < 0) {
-            printf("\n Read Error \n");
-        }
-      }
-      fclose (fp);
+        fclose (fp);
 
-      // Set modtime to original file modtime
-      valread = read(sock, &original_file_time, sizeof(time_t));
-      new_times.modtime = original_file_time; /* set mtime to original file time */
-      new_times.actime = time(NULL); /* set atime to current time */
-      utime(file_path, &new_times);
+        // Set modtime to original file modtime
+        valread = read(sock, &original_file_time, sizeof(time_t));
+        new_times.modtime = original_file_time; /* set mtime to original file time */
+        new_times.actime = time(NULL); /* set atime to current time */
+        utime(file_path, &new_times);
     } else {
-      printf("There's already a file named %s in this directory\n", file);
+        printf("There's already a file named %s in this directory\n", file);
     }
 };
 
@@ -154,7 +154,7 @@ void delete_server_file(char *file) {
 };
 
 void delete_local_file(char *file) {
-    if(remove(file) == 0){
+    if(remove(file) == 0) {
         // REVIEW Success.  print a message? return a value?
     };
 };
@@ -172,9 +172,9 @@ void cmdList() {
 
     /* Receive data in chunks */
     while (nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0) {
-      buffer[valread] = '\0';
-      printf("%s", buffer);
-      nLeft -= valread;
+        buffer[valread] = '\0';
+        printf("%s", buffer);
+        nLeft -= valread;
     }
 };
 
@@ -198,64 +198,64 @@ void cmdExit() {
     close_connection();
 }
 
-void sync_client(){
-  // TODO sync_client
+void sync_client() {
+    // TODO sync_client
 }
 
 void* sync_daemon(void* unused) {
-  // TODO Não enviar arquivo se ele foi recém baixado. Por exemplo, quando o servidor manda um PUSH pro cliente, este baixa o arquivo e aí o inotify acha que o arquivo foi criado, entao tenta enviá-lo ao servidor, que por sua vez envia push de novo.. ? Testar melhor. Talvez está faltando comparar timestamp na hora de receber um arquivo no servidor?
-  int length;
-  int fd;
-  int wd;
-  char buffer[BUF_LEN];
+    // TODO Não enviar arquivo se ele foi recém baixado. Por exemplo, quando o servidor manda um PUSH pro cliente, este baixa o arquivo e aí o inotify acha que o arquivo foi criado, entao tenta enviá-lo ao servidor, que por sua vez envia push de novo.. ? Testar melhor. Talvez está faltando comparar timestamp na hora de receber um arquivo no servidor?
+    int length;
+    int fd;
+    int wd;
+    char buffer[BUF_LEN];
 
-  fd = inotify_init();
+    fd = inotify_init();
 
-  if ( fd < 0 ) {
-    perror( "inotify_init" );
-  }
-
-  wd = inotify_add_watch( fd, user_sync_dir_path,
-                         IN_CLOSE_WRITE | IN_MOVE | IN_DELETE );
-
-  // TODO testar renomeação
-
-  while (1) {
-    int i = 0;
-    char filepath[MAXNAME];
-
-    length = read( fd, buffer, BUF_LEN );
-
-    if ( length < 0 ) {
-      perror( "read" );
+    if ( fd < 0 ) {
+        perror( "inotify_init" );
     }
 
-    while ( i < length ) {
-      struct inotify_event *event = ( struct inotify_event * ) &buffer[ i ];
-      if ( event->len ) {
-          if ( !(event->mask & IN_ISDIR) && event->name[0] != '.' ) { // If it's a file and it's not hidden
-              if ( (event->mask & IN_CLOSE_WRITE) || (event->mask & IN_MOVED_TO)  ) {
-                  debug_printf( "The file %s was created, modified, or moved from somewhere.\n", event->name );
-                  sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
-                  send_file(filepath);
-              } else if ( event->mask & IN_DELETE  ) {
-                  debug_printf( "The file %s was deleted.\n", event->name );
-                  delete_server_file(event->name);
-              } else if ( event->mask & IN_MOVED_FROM  ) {
-                  debug_printf( "The file %s was renamed.\n", event->name );
-                  sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
-                  delete_server_file(event->name);
-              }
-          }
-      }
-      i += EVENT_SIZE + event->len;
-    }
-    sleep(3); // REVIEW adjust sleep time
-  }
-  ( void ) inotify_rm_watch( fd, wd );
-  ( void ) close( fd );
+    wd = inotify_add_watch( fd, user_sync_dir_path,
+                            IN_CLOSE_WRITE | IN_MOVE | IN_DELETE );
 
-  exit( 0 );
+    // TODO testar renomeação
+
+    while (1) {
+        int i = 0;
+        char filepath[MAXNAME];
+
+        length = read( fd, buffer, BUF_LEN );
+
+        if ( length < 0 ) {
+            perror( "read" );
+        }
+
+        while ( i < length ) {
+            struct inotify_event *event = ( struct inotify_event * ) &buffer[ i ];
+            if ( event->len ) {
+                if ( !(event->mask & IN_ISDIR) && event->name[0] != '.' ) { // If it's a file and it's not hidden
+                    if ( (event->mask & IN_CLOSE_WRITE) || (event->mask & IN_MOVED_TO)  ) {
+                        debug_printf( "The file %s was created, modified, or moved from somewhere.\n", event->name );
+                        sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
+                        send_file(filepath);
+                    } else if ( event->mask & IN_DELETE  ) {
+                        debug_printf( "The file %s was deleted.\n", event->name );
+                        delete_server_file(event->name);
+                    } else if ( event->mask & IN_MOVED_FROM  ) {
+                        debug_printf( "The file %s was renamed.\n", event->name );
+                        sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
+                        delete_server_file(event->name);
+                    }
+                }
+            }
+            i += EVENT_SIZE + event->len;
+        }
+        sleep(3); // REVIEW adjust sleep time
+    }
+    ( void ) inotify_rm_watch( fd, wd );
+    ( void ) close( fd );
+
+    exit( 0 );
 }
 
 // This thread receives 'push file' requests from server
@@ -303,19 +303,19 @@ void* local_server(void* unused) {
         //puts("Connection accepted. Handler assigned");
 
         // Receive a message from server
-      	while ((read_size = recv(new_socket, server_message, METHODSIZE, 0)) > 0 ) {
-      		// end of string marker
-      		server_message[read_size] = '\0';
+        while ((read_size = recv(new_socket, server_message, METHODSIZE, 0)) > 0 ) {
+            // end of string marker
+            server_message[read_size] = '\0';
 
-              // TODO PULL method? (maybe another name...)
-              if (!strncmp(server_message, "PUSH", 4)) {
-                  printf("received PUSH from server\n");
-                  get_file(server_message + 5, user_sync_dir_path);
-              } else if (!strncmp(server_message, "DELETE", 6)) {
-                  printf("received DELETE from server\n");
-                  delete_local_file(server_message + 7);
-              }
-      	}
+            // TODO PULL method? (maybe another name...)
+            if (!strncmp(server_message, "PUSH", 4)) {
+                printf("received PUSH from server\n");
+                get_file(server_message + 5, user_sync_dir_path);
+            } else if (!strncmp(server_message, "DELETE", 6)) {
+                printf("received DELETE from server\n");
+                delete_local_file(server_message + 7);
+            }
+        }
 
     }
     if (new_socket < 0) {
@@ -361,8 +361,8 @@ int main(int argc, char * argv[]) {
     // Detect if connection was closed
     valread = read(sock, buffer, sizeof(buffer));
     if (valread == 0) {
-      printf("%s already connected in two devices. Closing connection...\n", server_user);
-      return 0;
+        printf("%s already connected in two devices. Closing connection...\n", server_user);
+        return 0;
     }
 
     debug_printf("[Connection established]\n");
@@ -391,18 +391,15 @@ int main(int argc, char * argv[]) {
                 scanf("%s", filename);
                 // TODO Copy file to local sync_dir. (What to do if there's already a file with the same name?)
                 send_file(filename);
-            }
-            else if (strcmp(token, "download") == 0) {
+            } else if (strcmp(token, "download") == 0) {
                 scanf("%s", filename);
                 char cwd[256];
                 getcwd(cwd, sizeof(cwd));
                 get_file(filename, cwd);
-            }
-            else if (strcmp(token, "delete") == 0) {
+            } else if (strcmp(token, "delete") == 0) {
                 scanf("%s", filename);
                 delete_server_file(filename);
-            }
-            else if (strcmp(token, "list") == 0) cmdList();
+            } else if (strcmp(token, "list") == 0) cmdList();
             else if (strcmp(token, "get_sync_dir") == 0) cmdGetSyncDir();
             else if (strcmp(token, "help") == 0) cmdMan();
             else printf("Invalid command! Type 'help' to see the available commands\n");

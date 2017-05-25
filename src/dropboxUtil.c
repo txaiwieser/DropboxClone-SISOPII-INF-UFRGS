@@ -19,16 +19,16 @@ void debug_printf(const char* message, ...) {
     }
 }
 
-void makedir_if_not_exists(const char* path){
-  struct stat st = {0};
-  if (stat(path, &st) == -1) {
-      mkdir(path, 0700);
-  }
+void makedir_if_not_exists(const char* path) {
+    struct stat st = {0};
+    if (stat(path, &st) == -1) {
+        mkdir(path, 0700);
+    }
 }
 
-int file_exists(const char* path){
-  struct stat st = {0};
-  return (stat(path, &st) == 0);
+int file_exists(const char* path) {
+    struct stat st = {0};
+    return (stat(path, &st) == 0);
 }
 
 int connect_server(char * host, int port) {
