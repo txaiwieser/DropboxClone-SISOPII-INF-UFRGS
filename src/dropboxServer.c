@@ -227,7 +227,8 @@ void send_file(char * file) {
 
 void delete_file(char *file) {
   char file_path[256];
-  int file_i, found_file = 0;
+  int file_i, found_file = 0, i;
+  char method[METHODSIZE];
 
   // Search for file in user struct.
   for(file_i = 0; file_i < MAXFILES; file_i++){
@@ -255,7 +256,14 @@ void delete_file(char *file) {
     printf("File not found\n");
   }
 
-  // TODO delete from other connected devices
+  // Delete file from other connected devices
+  // TODO TEST!!
+  for(i = 0; i < MAXDEVICES; i++ ){
+    if(pClientEntry->devices[i] != -1 && pClientEntry->devices[i] != sock){
+      sprintf(method, "DELETE %s", file);
+      write(pClientEntry->devices_server[i], method, sizeof(method));
+    }
+  }
 };
 
 void list_files(){

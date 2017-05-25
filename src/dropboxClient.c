@@ -153,6 +153,12 @@ void delete_server_file(char *file) {
     debug_printf("[%s method sent]\n", method);
 };
 
+void delete_local_file(char *file) {
+    if(remove(file) == 0){
+        // REVIEW Success.  print a message? return a value?
+    };
+};
+
 void cmdList() {
     int valread;
     int32_t nLeft;
@@ -183,7 +189,7 @@ void cmdMan() {
     printf("list\n");
     printf("download <filename.ext>\n");
     printf("upload <path/filename.ext>\n");
-    printf("delete <filename.ext>\n");
+    printf("delete <filename.ext>\t\tDelete file from server\n");
     printf("help\n");
     printf("exit\n\n");
 };
@@ -302,10 +308,12 @@ void* local_server(void* unused) {
       		server_message[read_size] = '\0';
 
               // TODO PULL method? (maybe another name...)
-              // TODO DELETE method (to only delete local file)
               if (!strncmp(server_message, "PUSH", 4)) {
                   printf("received PUSH from server\n");
                   get_file(server_message + 5, user_sync_dir_path);
+              } else if (!strncmp(server_message, "DELETE", 6)) {
+                  printf("received DELETE from server\n");
+                  delete_local_file(server_message + 7);
               }
       	}
 
