@@ -5,8 +5,10 @@
 
 ## TO DO
 ### bugs
+- [ ] sleep nao parece estar de fato esperando 3 segundos?
 - [ ] as vezes quando um arquivo é enviado para outro dispositivo, o arquivo do servidor fica com 0 bytes (ou as vezes o do cliente)
 - [ ] quando cliente recebe PUSHs seguidos, fica trancado no while após o segundo ou terceiro(?)
+- [ ] Ao apagar o arquivo de um cliente, é encaminhado o DELETE ao servidor, que deleta o arquivo e depois manda todos outros dispositivos conectar. Isso está funcioonando, o problema é que o inotify do cliente no momento está apenas ignorando os arquivos que foram recentemente baixados do servidor, e nao quando são deletados. Assim, se o cliente deleta um arquivo, o servidor também deleta e manda o segundo dispositivo deletar. o arquivo é apagado do segundo dispositivo, mas aí o inotify acha que foi removido 'voluntariamente' pelo usuário, e entao manda o servidor deletar o arquivo tb. O servidor então exibe uma msg de File not found, pois já não existe arquivo com esse nome nele. Aparentemente isso nao tem gerado problemas, mas o ideal é arrumra isso pra nao enviar a request pro servidor. (POtencialmente podem ocorrer problemas se o primeiro cliente apagar o arquivo e em seguida recriá-lo, antes que o inotify do segundo cliente acorde do sleep)
 
 ### Alta prioridade
 - [ ] Ao iniciar o cliente, os arquivos que foram modificados, deletados e adicionados ao sync_dir enquanto o cliente não estava online devem ser enviados ao servidor

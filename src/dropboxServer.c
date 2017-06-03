@@ -235,6 +235,7 @@ void delete_file(char *file) {
         // Stop if file is found
         if(strcmp(pClientEntry->file_info[file_i].name, file) == 0) {
             found_file = 1;
+            printf("encontrou arquivo no struct!XXXXXXXXXXXXX\n");
             break;
         }
     }
@@ -243,7 +244,7 @@ void delete_file(char *file) {
 
     if(found_file) {
         // Set it's area free
-        strcpy(pClientEntry->file_info[file_i].name, "olaaaaaaa.txt");
+        strcpy(pClientEntry->file_info[file_i].name, "olaaaaaaa.txt"); // REVIEW why olaaaaaaa?
         pClientEntry->file_info[file_i].last_modified = time(NULL); // REVIEW set to current time. anything better?
         pClientEntry->file_info[file_i].size = FREE_FILE_SIZE;
         // Erase file
@@ -252,17 +253,17 @@ void delete_file(char *file) {
         } else {
             printf("Unable to delete file\n");
         }
+
+        // Delete file from other connected devices
+        // TODO TEST!!
+        for(i = 0; i < MAXDEVICES; i++ ) {
+            if(pClientEntry->devices[i] != -1 && pClientEntry->devices[i] != sock) {
+                sprintf(method, "DELETE %s", file);
+                write(pClientEntry->devices_server[i], method, sizeof(method));
+            }
+        }
     } else {
         printf("File not found\n");
-    }
-
-    // Delete file from other connected devices
-    // TODO TEST!!
-    for(i = 0; i < MAXDEVICES; i++ ) {
-        if(pClientEntry->devices[i] != -1 && pClientEntry->devices[i] != sock) {
-            sprintf(method, "DELETE %s", file);
-            write(pClientEntry->devices_server[i], method, sizeof(method));
-        }
     }
 };
 

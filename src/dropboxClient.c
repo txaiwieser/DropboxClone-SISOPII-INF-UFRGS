@@ -145,8 +145,8 @@ void get_file(char *file, char *path) {
         new_times.modtime = original_file_time; /* set mtime to original file time */
         new_times.actime = time(NULL); /* set atime to current time */
         utime(file_path, &new_times);
+
         // If path is user_sync_dir, insert filename in the list of ignored files
-        printf("Get File: Antes do if User: %s / Path: %s", user_sync_dir_path, path);
         if(strcmp(user_sync_dir_path, path) == 0){
             ignoredfile_node = malloc(sizeof(*ignoredfile_node));
             strcpy(ignoredfile_node->filename, file);
@@ -154,7 +154,7 @@ void get_file(char *file, char *path) {
                 perror("malloc failed");
             }
             TAILQ_INSERT_TAIL(&my_tailq_head, ignoredfile_node, entries);
-            debug_printf("Inseriu arquivo %s na lista\n", file);
+            debug_printf("Inseriu arquivo %s na lista pois foi baixado\n", file);
         }
     } else {
         printf("There's already a file named %s in this directory\n", file);
@@ -173,7 +173,9 @@ void delete_server_file(char *file) {
 };
 
 void delete_local_file(char *file) {
-    if(remove(file) == 0) {
+    char filepath[MAXNAME];
+    sprintf(filepath, "%s/%s", user_sync_dir_path, file);
+    if(remove(filepath) == 0) {
         // REVIEW Success.  print a message? return a value?
     };
 };
@@ -258,7 +260,7 @@ void* sync_daemon(void* unused) {
                     // Search for file in list of ignored files
                     for (ignoredfile_node = TAILQ_FIRST(&my_tailq_head); ignoredfile_node != NULL; ignoredfile_node = tmp_ignoredfile_node) {
                         if (strcmp(ignoredfile_node->filename, event->name) == 0) {
-                            debug_printf("Daemon: Achou arq na lista\n");
+                            debug_printf("Daemon: Achou arquivo %s na lista\n", event->name);
                             break;
                         }
                         tmp_ignoredfile_node = TAILQ_NEXT(ignoredfile_node, entries);
