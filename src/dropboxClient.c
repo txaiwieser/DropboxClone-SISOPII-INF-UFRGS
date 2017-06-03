@@ -15,6 +15,7 @@
 #include <libgen.h>
 #include <pthread.h>
 #include <math.h>
+#include <dirent.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxClient.h"
 
@@ -179,6 +180,36 @@ void delete_local_file(char *file) {
     };
 };
 
+// Save list of files into user_sync_dir_path/.dropboxfiles
+void save_list_of_files(){
+  // TODO autosave every x seconds? or maybe everytime there's a file change?
+  struct dirent **namelist;
+  int n, i;
+  FILE *fp;
+  char filepath[MAXNAME];
+  sprintf(filepath, "%s/.dropboxfiles", user_sync_dir_path);
+
+  fp = fopen(filepath, "wb");
+  if (NULL == fp) {
+      printf("Error opening file");
+  } else {
+      n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
+
+      // TODO ignore directories
+      if (n > 2) { // Starting in i=2, it ignores '.' and '..'
+          for (i = 2; i < n; i++) {
+              if(namelist[i]->d_name[0] != '.') { // If not a hidden file
+                  fwrite(namelist[i]->d_name, strlen(namelist[i]->d_name), 1, fp);
+                  fwrite("\n", 1, 1, fp); // TODO save timestamps
+                  free(namelist[i]);
+              }
+          }
+      }
+  }
+  debug_printf("Fechando .dropboxfiles\n");
+  fclose (fp);
+}
+
 void cmdList() {
     int valread;
     int32_t nLeft;
@@ -215,6 +246,7 @@ void cmdMan() {
 };
 
 void cmdExit() {
+    save_list_of_files();
     close_connection();
 }
 
@@ -426,8 +458,10 @@ int main(int argc, char * argv[]) {
         // TODO Ajustar se usuário tecla enter sem inserir nada antes
         scanf("%s", cmd);
         if ((token = strtok(cmd, " \t")) != NULL) {
-            if (strcmp(token, "exit") == 0) break;
-            else if (strcmp(token, "upload") == 0) {
+            if (strcmp(token, "exit") == 0) {
+                cmdExit();
+                break;
+            } else if (strcmp(token, "upload") == 0) {
                 scanf("%s", filename);
                 // TODO Copy file to local sync_dir. (What to do if there's already a file with the same name?)
                 send_file(filename);
