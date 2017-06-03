@@ -7,6 +7,7 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/queue.h>
 #include <time.h>
 #include <utime.h>
 #include <unistd.h>
@@ -22,8 +23,12 @@ char server_host[256];
 int server_port = 0, sock = 0;
 char server_user[MAXNAME];
 char user_sync_dir_path[256];
+char *pIgnoredFileEntry; // pointer to ignored file in ignored files list
+
 #define EVENT_SIZE  ( sizeof (struct inotify_event) )
 #define BUF_LEN ( 1024 * ( EVENT_SIZE + 16 ) )
+
+TAILQ_HEAD(, tailq_entry) my_tailq_head;
 
 // TODO Handle errors on send_file, get_file, receive_file (on server), send_file (on server). If file can't be opened, it should return an error and exit. Also, display success messages.
 void send_file(char *file) {
@@ -96,8 +101,11 @@ void get_file(char *file, char *path) {
     char file_path[256];
     time_t original_file_time;
     struct utimbuf new_times;
+    struct tailq_entry *ignoredfile_node;
 
-    if(!file_exists(file)) {
+    // If current directory is user_sync_dir, overwrite the file. It's another directory, get file only if there's no file with same filename
+    printf("User: %s\nPath: %s\n %d\n", user_sync_dir_path, path, strcmp(user_sync_dir_path, path));
+    if(!file_exists(file) || strcmp(user_sync_dir_path, path) == 0) {
 
         // Set saving path to current directory
         sprintf(file_path, "%s/%s", path, file);
@@ -137,6 +145,17 @@ void get_file(char *file, char *path) {
         new_times.modtime = original_file_time; /* set mtime to original file time */
         new_times.actime = time(NULL); /* set atime to current time */
         utime(file_path, &new_times);
+        // If path is user_sync_dir, insert filename in the list of ignored files
+        printf("Get File: Antes do if User: %s / Path: %s", user_sync_dir_path, path);
+        if(strcmp(user_sync_dir_path, path) == 0){
+            ignoredfile_node = malloc(sizeof(*ignoredfile_node));
+            strcpy(ignoredfile_node->filename, file);
+            if (ignoredfile_node == NULL) {
+                perror("malloc failed");
+            }
+            TAILQ_INSERT_TAIL(&my_tailq_head, ignoredfile_node, entries);
+            debug_printf("Inseriu arquivo %s na lista\n", file);
+        }
     } else {
         printf("There's already a file named %s in this directory\n", file);
     }
@@ -208,6 +227,8 @@ void* sync_daemon(void* unused) {
     int fd;
     int wd;
     char buffer[BUF_LEN];
+    struct tailq_entry *ignoredfile_node;
+    struct tailq_entry *tmp_ignoredfile_node;
 
     fd = inotify_init();
 
@@ -234,17 +255,33 @@ void* sync_daemon(void* unused) {
             struct inotify_event *event = ( struct inotify_event * ) &buffer[ i ];
             if ( event->len ) {
                 if ( !(event->mask & IN_ISDIR) && event->name[0] != '.' ) { // If it's a file and it's not hidden
-                    if ( (event->mask & IN_CLOSE_WRITE) || (event->mask & IN_MOVED_TO)  ) {
-                        debug_printf( "The file %s was created, modified, or moved from somewhere.\n", event->name );
-                        sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
-                        send_file(filepath);
-                    } else if ( event->mask & IN_DELETE  ) {
-                        debug_printf( "The file %s was deleted.\n", event->name );
-                        delete_server_file(event->name);
-                    } else if ( event->mask & IN_MOVED_FROM  ) {
-                        debug_printf( "The file %s was renamed.\n", event->name );
-                        sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
-                        delete_server_file(event->name);
+                    // Search for file in list of ignored files
+                    for (ignoredfile_node = TAILQ_FIRST(&my_tailq_head); ignoredfile_node != NULL; ignoredfile_node = tmp_ignoredfile_node) {
+                        if (strcmp(ignoredfile_node->filename, event->name) == 0) {
+                            debug_printf("Daemon: Achou arq na lista\n");
+                            break;
+                        }
+                        tmp_ignoredfile_node = TAILQ_NEXT(ignoredfile_node, entries);
+                    }
+                    // If it's not in the list, it was modified locally, so changes need to be propagated to server
+                    if(ignoredfile_node == NULL){
+                        if ( (event->mask & IN_CLOSE_WRITE) || (event->mask & IN_MOVED_TO)  ) {
+                            debug_printf( "The file %s was created, modified, or moved from somewhere.\n", event->name );
+                            sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
+                            send_file(filepath);
+                        } else if ( event->mask & IN_DELETE  ) {
+                            debug_printf( "The file %s was deleted.\n", event->name );
+                            delete_server_file(event->name);
+                        } else if ( event->mask & IN_MOVED_FROM  ) {
+                            debug_printf( "The file %s was renamed.\n", event->name );
+                            sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
+                            delete_server_file(event->name);
+                        }
+                    } else {
+                        // Remove file from list
+                        TAILQ_REMOVE(&my_tailq_head, ignoredfile_node, entries);
+                        /* Free the item as we don’t need it anymore. */
+                        free(ignoredfile_node);
                     }
                 }
             }
@@ -348,6 +385,9 @@ int main(int argc, char * argv[]) {
     if (sock < 0) {
         return -1;
     }
+
+    // Initialize the tail queue
+    TAILQ_INIT(&my_tailq_head);
 
     // Define path to user sync_dir folder
     sprintf(user_sync_dir_path, "%s/sync_dir_%s", getenv("HOME"), server_user);

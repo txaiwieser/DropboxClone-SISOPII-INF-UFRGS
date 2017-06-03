@@ -54,7 +54,7 @@ int main(int argc, char * argv[]) {
         perror("bind failed");
         exit(EXIT_FAILURE);
     }
-    if (listen(server_fd, 3) < 0) { // REVIEW Is 3 the best value for backlog (2nd parameter)?
+    if (listen(server_fd, 3) < 0) {
         perror("listen");
         exit(EXIT_FAILURE);
     }
@@ -322,17 +322,20 @@ void free_device() {
 void *connection_handler(void *socket_desc) {
     // Get the socket descriptor
     sock = *(int *) socket_desc;
-    int read_size;
+    struct sockaddr_in addr;
+    int read_size, i, n, device_to_use;
+    char file_path[256], client_ip[20], client_message[METHODSIZE];
     uint16_t client_server_port;
-    char client_message[METHODSIZE];
-    struct tailq_entry *client_node;
-    struct tailq_entry *tmp_client_node;
+    struct tailq_entry *client_node, *tmp_client_node;
     int *nullReturn = NULL;
     struct dirent **namelist;
-    int i, n;
-    int device_to_use;
     struct stat st;
-    char file_path[256];
+
+
+    // Get socket addr and client IP
+    socklen_t addr_size = sizeof(struct sockaddr_in);
+    getpeername(sock, (struct sockaddr *)&addr, &addr_size);
+    strcpy(client_ip, inet_ntoa(addr.sin_addr));
 
     // Receive username from client
     read_size = recv(sock, username, sizeof(username), 0);
@@ -415,8 +418,7 @@ void *connection_handler(void *socket_desc) {
     debug_printf("Client's local server port: %d\n", client_server_port);
 
     // Connect to client's server
-    char client_server[] = "localhost";  // TODO get right hostname
-    client_node->client_entry.devices_server[device_to_use] = connect_server(client_server, client_server_port);
+    client_node->client_entry.devices_server[device_to_use] = connect_server(client_ip, client_server_port);
 
     // Receive requests from client
     while ((read_size = recv(sock, client_message, METHODSIZE, 0)) > 0 ) {

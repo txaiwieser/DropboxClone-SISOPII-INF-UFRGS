@@ -4,11 +4,13 @@
 3. Inicie o cliente: ```./bin/dropboxClient usuario 127.0.0.1 3003```
 
 ## TO DO
+### bugs
+- [ ] as vezes quando um arquivo é enviado para outro dispositivo, o arquivo do servidor fica com 0 bytes (ou as vezes o do cliente)
+- [ ] quando cliente recebe PUSHs seguidos, fica trancado no while após o segundo ou terceiro(?)
+
 ### Alta prioridade
 - [ ] Ao iniciar o cliente, os arquivos que foram modificados, deletados e adicionados ao sync_dir enquanto o cliente não estava online devem ser enviados ao servidor
 - [ ] Onde usar semáforos e mutex? (1: impedir que um usuario baixe, em um dispositivo, um arquivo enquanto ele está sendo enviado ao servidor por outro dispositivo; 2: impedir que daemon rode enquanto o usuario está upando ou fazendo download?; 3: onde mais?)
-- [ ] Sincronizar cliente com servidor
-- [ ] Sincronizar servidor com cliente
 
 ### Média prioridade
 - [ ] Se a conexão com o servidor cair, o cliente poderia ser avisado
