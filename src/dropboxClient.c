@@ -104,7 +104,6 @@ void get_file(char *file, char *path) {
     struct tailq_entry *ignoredfile_node;
 
     // If current directory is user_sync_dir, overwrite the file. It's another directory, get file only if there's no file with same filename
-    printf("User: %s\nPath: %s\n %d\n", user_sync_dir_path, path, strcmp(user_sync_dir_path, path));
     if(!file_exists(file) || strcmp(user_sync_dir_path, path) == 0) {
 
         // Set saving path to current directory
@@ -232,7 +231,7 @@ void* sync_daemon(void* unused) {
     struct tailq_entry *ignoredfile_node;
     struct tailq_entry *tmp_ignoredfile_node;
 
-    fd = inotify_init();
+    fd = inotify_init(); // TODO Use blocking or non-blockking? It's blocked by default. Another possibility is to use non-blocking mode with sleep(), in this case initialization should be inotify_init1(IN_NONBLOCK);
 
     if ( fd < 0 ) {
         perror( "inotify_init" );
@@ -289,7 +288,6 @@ void* sync_daemon(void* unused) {
             }
             i += EVENT_SIZE + event->len;
         }
-        sleep(3); // REVIEW adjust sleep time
     }
     ( void ) inotify_rm_watch( fd, wd );
     ( void ) close( fd );
