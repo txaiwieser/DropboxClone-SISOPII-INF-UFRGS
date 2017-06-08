@@ -186,7 +186,8 @@ void save_list_of_files(){
   struct dirent **namelist;
   int n, i;
   FILE *fp;
-  char filepath[MAXNAME];
+  struct stat st;
+  char filepath[MAXNAME], stfpath[MAXNAME];;
   sprintf(filepath, "%s/.dropboxfiles", user_sync_dir_path);
 
   fp = fopen(filepath, "wb");
@@ -195,12 +196,17 @@ void save_list_of_files(){
   } else {
       n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
 
-      // TODO ignore directories
       if (n > 2) { // Starting in i=2, it ignores '.' and '..'
           for (i = 2; i < n; i++) {
-              if(namelist[i]->d_name[0] != '.') { // If not a hidden file
+              sprintf(stfpath, "%s/%s", user_sync_dir_path, namelist[i]->d_name);
+              stat(stfpath, &st);
+              if(namelist[i]->d_name[0] != '.' && !(st.st_mode & S_IFDIR)) { // If it's a file and it's not hidden
+                  // Save filename
                   fwrite(namelist[i]->d_name, strlen(namelist[i]->d_name), 1, fp);
-                  fwrite("\n", 1, 1, fp); // TODO save timestamps
+                  fwrite("\n", 1, 1, fp);
+                  // and timestamp
+                  fwrite(&st.st_mtime, sizeof st.st_mtime, 1, fp);
+                  fwrite("\n", 1, 1, fp);
                   free(namelist[i]);
               }
           }
