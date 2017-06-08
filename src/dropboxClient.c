@@ -187,10 +187,10 @@ void save_list_of_files(){
   int n, i;
   FILE *fp;
   struct stat st;
-  char filepath[MAXNAME], stfpath[MAXNAME];;
+  char filepath[MAXNAME], stfpath[MAXNAME];
   sprintf(filepath, "%s/.dropboxfiles", user_sync_dir_path);
 
-  fp = fopen(filepath, "wb");
+  fp = fopen(filepath, "w");
   if (NULL == fp) {
       printf("Error opening file");
   } else {
@@ -205,14 +205,18 @@ void save_list_of_files(){
                   fwrite(namelist[i]->d_name, strlen(namelist[i]->d_name), 1, fp);
                   fwrite("\n", 1, 1, fp);
                   // and timestamp
-                  fwrite(&st.st_mtime, sizeof st.st_mtime, 1, fp);
+                  struct tm *ptm = gmtime(&st.st_mtime);
+                  char buf[256];
+                  strftime(buf, sizeof buf, "%F %T", ptm);
+                  fwrite(buf, strlen(buf), 1, fp);
                   fwrite("\n", 1, 1, fp);
+
                   free(namelist[i]);
               }
           }
       }
   }
-  debug_printf("Fechando .dropboxfiles\n");
+  debug_printf("[Fechando .dropboxfiles]\n");
   fclose (fp);
 }
 
@@ -257,7 +261,36 @@ void cmdExit() {
 }
 
 void sync_client() {
-    // TODO sync_client
+    FILE *fp;
+    char filepath[MAXNAME], filename[MAXNAME], buf[256];
+    sprintf(filepath, "%s/.dropboxfiles", user_sync_dir_path);
+    time_t mtime;
+
+    debug_printf("[Syncing...]\n");
+
+    // Open .dropboxfiles
+    fp = fopen(filepath, "r");
+    if (NULL == fp) {
+        printf("Error opening file");
+    } else {
+        // Read filenames with timestamps
+        while(fgets(filename, sizeof(filename), fp)){
+            // Remove \n at end of string
+            size_t ln = strlen(filename)-1;
+            if (filename[ln] == '\n')
+                filename[ln] = '\0';
+
+            fgets(buf, sizeof(buf), fp);
+            // Converting from string to time_t
+            struct tm tm;
+            strptime(buf, "%F %T", &tm);
+            time_t t = mktime(&tm);
+
+            debug_printf("File %s modified %s", filename, buf);
+        }
+    }
+    fclose(fp);
+    debug_printf("[Syncing done]\n");
 }
 
 void* sync_daemon(void* unused) {
@@ -454,6 +487,9 @@ int main(int argc, char * argv[]) {
         perror("could not create local_server thread");
         return 1;
     }
+
+    // Sync client
+    sync_client();
 
     printf("Welcome to Dropbox! - v 1.0\n");
     cmdMan();
