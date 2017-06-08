@@ -8,6 +8,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/queue.h>
+#define __USE_XOPEN
 #include <time.h>
 #include <utime.h>
 #include <unistd.h>
@@ -154,7 +155,7 @@ void get_file(char *file, char *path) {
                 perror("malloc failed");
             }
             TAILQ_INSERT_TAIL(&my_tailq_head, ignoredfile_node, entries);
-            debug_printf("Inseriu arquivo %s na lista pois foi baixado\n", file);
+            debug_printf("[Inseriu arquivo %s na lista pois foi baixado]\n", file);
         }
     } else {
         printf("There's already a file named %s in this directory\n", file);
@@ -174,9 +175,19 @@ void delete_server_file(char *file) {
 
 void delete_local_file(char *file) {
     char filepath[MAXNAME];
+    struct tailq_entry *ignoredfile_node;
     sprintf(filepath, "%s/%s", user_sync_dir_path, file);
     if(remove(filepath) == 0) {
         // REVIEW Success.  print a message? return a value?
+
+        // Add to ignore list, so inotify doesn't send a DELETE method again to server
+        ignoredfile_node = malloc(sizeof(*ignoredfile_node));
+        strcpy(ignoredfile_node->filename, file);
+        if (ignoredfile_node == NULL) {
+            perror("malloc failed");
+        }
+        TAILQ_INSERT_TAIL(&my_tailq_head, ignoredfile_node, entries);
+        debug_printf("[Inseriu arquivo %s na lista pois foi apagado primeiramente em outro dispositivo]\n", file);
     };
 };
 
@@ -264,7 +275,6 @@ void sync_client() {
     FILE *fp;
     char filepath[MAXNAME], filename[MAXNAME], buf[256];
     sprintf(filepath, "%s/.dropboxfiles", user_sync_dir_path);
-    time_t mtime;
 
     debug_printf("[Syncing...]\n");
 
@@ -288,6 +298,7 @@ void sync_client() {
 
             debug_printf("File %s modified %s", filename, buf);
         }
+        // TODO compare with server and then sync.
     }
     fclose(fp);
     debug_printf("[Syncing done]\n");
@@ -302,7 +313,7 @@ void* sync_daemon(void* unused) {
     struct tailq_entry *ignoredfile_node;
     struct tailq_entry *tmp_ignoredfile_node;
 
-    fd = inotify_init(); // TODO Use blocking or non-blockking? It's blocked by default. Another possibility is to use non-blocking mode with sleep(), in this case initialization should be inotify_init1(IN_NONBLOCK);
+    fd = inotify_init(); // Blocking by default
 
     if ( fd < 0 ) {
         perror( "inotify_init" );
@@ -490,6 +501,7 @@ int main(int argc, char * argv[]) {
 
     // Sync client
     sync_client();
+    debug_printf("[Device synced]\n");
 
     printf("Welcome to Dropbox! - v 1.0\n");
     cmdMan();
