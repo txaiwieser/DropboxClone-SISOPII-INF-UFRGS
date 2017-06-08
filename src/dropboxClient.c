@@ -281,6 +281,7 @@ void sync_client() {
     // Open .dropboxfiles
     fp = fopen(filepath, "r");
     if (NULL == fp) {
+        // TODO checar se arquivo existe?
         printf("Error opening file");
     } else {
         // Read filenames with timestamps
