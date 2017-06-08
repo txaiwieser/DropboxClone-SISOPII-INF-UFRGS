@@ -303,6 +303,29 @@ void sync_client() {
           // TODO compare with server and then sync.
       }
       fclose(fp);
+
+      /* TODO If a file listed on .dropboxfiles doesn't exist anymore,
+      user deleted it. So, delete it on server and other devices too.
+      delete_server_file("filename");
+      */
+
+      /* TODO If a file listed on .dropboxfiles exists locally, but not on server,
+      it means it was deleted by another device. So, delete it locally (without propagating to server).
+      delete_local_file("filename");
+      */
+
+      /* TODO If there's a file that isn't listed on .dropboxfiles, it was created after
+      last sync. So, upload it to the server.
+      send_file("filename");
+      */
+
+      /* TODO If a file is listed on .dropboxfiles, exists locally and on server,
+      need to check what's the newer version, and update it on client or server.
+      if (localversion newer) send_file("filename");
+      else if (remoteversion newer) get_file("filename");
+      */
+
+      // REVIEW any other case?
     }
     debug_printf("[Syncing done]\n");
 }
