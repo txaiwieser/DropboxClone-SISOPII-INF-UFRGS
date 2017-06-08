@@ -273,35 +273,37 @@ void cmdExit() {
 
 void sync_client() {
     FILE *fp;
+    struct stat st;
     char filepath[MAXNAME], filename[MAXNAME], buf[256];
     sprintf(filepath, "%s/.dropboxfiles", user_sync_dir_path);
 
     debug_printf("[Syncing...]\n");
 
-    // Open .dropboxfiles
-    fp = fopen(filepath, "r");
-    if (NULL == fp) {
-        // TODO checar se arquivo existe?
-        printf("Error opening file");
-    } else {
-        // Read filenames with timestamps
-        while(fgets(filename, sizeof(filename), fp)){
-            // Remove \n at end of string
-            size_t ln = strlen(filename)-1;
-            if (filename[ln] == '\n')
-                filename[ln] = '\0';
+    // Open .dropboxfiles if it exists
+    if(stat(filepath, &st) == 0){
+      fp = fopen(filepath, "r");
+      if (NULL == fp) {
+          printf("Error opening file");
+      } else {
+          // Read filenames with timestamps
+          while(fgets(filename, sizeof(filename), fp)){
+              // Remove \n at end of string
+              size_t ln = strlen(filename)-1;
+              if (filename[ln] == '\n')
+                  filename[ln] = '\0';
 
-            fgets(buf, sizeof(buf), fp);
-            // Converting from string to time_t
-            struct tm tm;
-            strptime(buf, "%F %T", &tm);
-            time_t t = mktime(&tm);
+              fgets(buf, sizeof(buf), fp);
+              // Converting from string to time_t
+              struct tm tm;
+              strptime(buf, "%F %T", &tm);
+              time_t t = mktime(&tm);
 
-            debug_printf("File %s modified %s", filename, buf);
-        }
-        // TODO compare with server and then sync.
+              debug_printf("File %s modified %s", filename, buf);
+          }
+          // TODO compare with server and then sync.
+      }
+      fclose(fp);
     }
-    fclose(fp);
     debug_printf("[Syncing done]\n");
 }
 
