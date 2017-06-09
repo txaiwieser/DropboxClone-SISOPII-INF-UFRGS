@@ -9,6 +9,8 @@
 #include <string.h>
 #include "../include/dropboxUtil.h"
 
+// TODO mutex nas funcoes abaixo??
+
 /* Mensagens de debug */
 void debug_printf(const char* message, ...) {
     if(DEBUG) {

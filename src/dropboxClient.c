@@ -30,6 +30,8 @@ char *pIgnoredFileEntry; // pointer to ignored file in ignored files list
 #define EVENT_SIZE  ( sizeof (struct inotify_event) )
 #define BUF_LEN ( 1024 * ( EVENT_SIZE + 16 ) )
 
+pthread_mutex_t fileOperationMutex = PTHREAD_MUTEX_INITIALIZER;
+
 TAILQ_HEAD(, tailq_entry) my_tailq_head;
 
 // TODO Handle errors on send_file, get_file, receive_file (on server), send_file (on server). If file can't be opened, it should return an error and exit. Also, display success messages.
@@ -41,9 +43,9 @@ void send_file(char *file) {
     int valread;
     int32_t length_converted;
 
-    stat_result = stat(file, &st);
+    pthread_mutex_lock(&fileOperationMutex);
 
-    if (stat_result == 0 && S_ISREG(st.st_mode)) { // If file exists
+    if (stat(file, &st) == 0 && S_ISREG(st.st_mode)) { // If file exists
         /* Open the file that we wish to transfer */
         FILE *fp = fopen(file,"rb");
         if (fp == NULL) {
@@ -93,6 +95,8 @@ void send_file(char *file) {
     } else {
         printf("File doesn't exist! Pass a valid filename.\n");
     }
+
+    pthread_mutex_unlock(&fileOperationMutex);
 }
 
 void get_file(char *file, char *path) {
@@ -104,6 +108,8 @@ void get_file(char *file, char *path) {
     time_t original_file_time;
     struct utimbuf new_times;
     struct tailq_entry *ignoredfile_node;
+
+    pthread_mutex_lock(&fileOperationMutex);
 
     // If current directory is user_sync_dir, overwrite the file. It's another directory, get file only if there's no file with same filename
     if(!file_exists(file) || strcmp(user_sync_dir_path, path) == 0) {
@@ -160,6 +166,8 @@ void get_file(char *file, char *path) {
     } else {
         printf("There's already a file named %s in this directory\n", file);
     }
+
+    pthread_mutex_unlock(&fileOperationMutex);
 };
 
 void delete_server_file(char *file) {
@@ -177,6 +185,9 @@ void delete_local_file(char *file) {
     char filepath[MAXNAME];
     struct tailq_entry *ignoredfile_node;
     sprintf(filepath, "%s/%s", user_sync_dir_path, file);
+
+    pthread_mutex_lock(&fileOperationMutex);
+
     if(remove(filepath) == 0) {
         // REVIEW Success.  print a message? return a value?
 
@@ -189,6 +200,8 @@ void delete_local_file(char *file) {
         TAILQ_INSERT_TAIL(&my_tailq_head, ignoredfile_node, entries);
         debug_printf("[Inseriu arquivo %s na lista pois foi apagado primeiramente em outro dispositivo]\n", file);
     };
+
+    pthread_mutex_unlock(&fileOperationMutex);
 };
 
 // Save list of files into user_sync_dir_path/.dropboxfiles
@@ -200,6 +213,8 @@ void save_list_of_files(){
   struct stat st;
   char filepath[MAXNAME], stfpath[MAXNAME];
   sprintf(filepath, "%s/.dropboxfiles", user_sync_dir_path);
+
+  pthread_mutex_lock(&fileOperationMutex);
 
   fp = fopen(filepath, "w");
   if (NULL == fp) {
@@ -229,6 +244,8 @@ void save_list_of_files(){
   }
   debug_printf("[Fechando .dropboxfiles]\n");
   fclose (fp);
+
+  pthread_mutex_lock(&fileOperationMutex);
 }
 
 void cmdList() {
@@ -276,6 +293,8 @@ void sync_client() {
     struct stat st;
     char filepath[MAXNAME], filename[MAXNAME], buf[256];
     sprintf(filepath, "%s/.dropboxfiles", user_sync_dir_path);
+
+    pthread_mutex_lock(&fileOperationMutex);
 
     debug_printf("[Syncing...]\n");
 
@@ -328,6 +347,7 @@ void sync_client() {
       // REVIEW any other case?
     }
     debug_printf("[Syncing done]\n");
+    pthread_mutex_unlock(&fileOperationMutex);
 }
 
 void* sync_daemon(void* unused) {
@@ -389,6 +409,7 @@ void* sync_daemon(void* unused) {
                     } else {
                         // Remove file from list
                         TAILQ_REMOVE(&my_tailq_head, ignoredfile_node, entries);
+                        // REVIEW mutex?
                         /* Free the item as we don’t need it anymore. */
                         free(ignoredfile_node);
                     }
@@ -403,7 +424,7 @@ void* sync_daemon(void* unused) {
     exit( 0 );
 }
 
-// This thread receives 'push file' requests from server
+// This thread receives requests from server
 void* local_server(void* unused) {
     int server_fd, new_socket;
     struct sockaddr_in address;
@@ -419,7 +440,7 @@ void* local_server(void* unused) {
     }
 
     address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_addr.s_addr = INADDR_ANY; // REVIEW INADDR_ANY? IP?
     address.sin_port = 0; // auto assign port // REVIEW check bind return to confirm it succeded https://stackoverflow.com/questions/10294515/how-do-i-find-in-c-that-a-port-is-free-to-use
 
     // Forcefully attaching socket to the port
@@ -445,14 +466,12 @@ void* local_server(void* unused) {
     // Accept and incoming connection
     addrlen = sizeof(struct sockaddr_in);
     while ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen))) {
-        //puts("Connection accepted. Handler assigned");
 
         // Receive a message from server
         while ((read_size = recv(new_socket, server_message, METHODSIZE, 0)) > 0 ) {
             // end of string marker
             server_message[read_size] = '\0';
 
-            // TODO PULL method? (maybe another name...)
             if (!strncmp(server_message, "PUSH", 4)) {
                 printf("received PUSH from server\n");
                 get_file(server_message + 5, user_sync_dir_path);
