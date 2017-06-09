@@ -4,6 +4,8 @@
 3. Inicie o cliente: ```./bin/dropboxClient usuario 127.0.0.1 3003```
 
 ## TO DO
+SEXTA: Colocar mutex no servidor e no util, testar bem, começar a fazer relatório
+
 ### bugs
 - [ ] as vezes quando um arquivo é enviado para outro dispositivo, o arquivo do servidor fica com 0 bytes (ou as vezes o do cliente)
 - [ ] quando cliente recebe PUSHs seguidos, fica trancado no while após o segundo ou terceiro(?)
