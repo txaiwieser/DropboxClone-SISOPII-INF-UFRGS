@@ -7,9 +7,10 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <string.h>
+#include <pthread.h>
 #include "../include/dropboxUtil.h"
 
-// TODO mutex nas funcoes abaixo??
+pthread_mutex_t fileMutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Mensagens de debug */
 void debug_printf(const char* message, ...) {
@@ -22,15 +23,20 @@ void debug_printf(const char* message, ...) {
 }
 
 void makedir_if_not_exists(const char* path) {
+    pthread_mutex_lock(&fileMutex);
     struct stat st = {0};
     if (stat(path, &st) == -1) {
         mkdir(path, 0700);
     }
+    pthread_mutex_unlock(&fileMutex);
 }
 
 int file_exists(const char* path) {
+    pthread_mutex_lock(&fileMutex);
     struct stat st = {0};
-    return (stat(path, &st) == 0);
+    int stat_result = (stat(path, &st) == 0);
+    pthread_mutex_unlock(&fileMutex);
+    return stat_result;
 }
 
 int connect_server(char * host, int port) {

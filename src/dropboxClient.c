@@ -408,7 +408,9 @@ void* sync_daemon(void* unused) {
                         if ( (event->mask & IN_CLOSE_WRITE) || (event->mask & IN_MOVED_TO)  ) {
                             debug_printf( "The file %s was created, modified, or moved from somewhere.\n", event->name );
                             sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
+                            pthread_mutex_unlock(&inotifyMutex);
                             send_file(filepath);
+                            pthread_mutex_lock(&inotifyMutex);
                         } else if ( event->mask & IN_DELETE  ) {
                             debug_printf( "The file %s was deleted.\n", event->name );
                             delete_server_file(event->name);

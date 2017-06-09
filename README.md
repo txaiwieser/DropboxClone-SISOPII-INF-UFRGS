@@ -7,8 +7,7 @@
 SEXTA: Colocar mutex no servidor e no util, testar bem (criar testes), começar a fazer relatório
 SEXTA: Ao fazer download de um arquivo que já existe no dir atual, ele fica em loop exibindo mensagem dizendo que ja tem o arquivo.
 SEXTA: Ver servidor está salvando timestamp do arquivo recebido do cliente.
-
-### bugs
+REVISAR seções críticas e possiveis saídas dela por pthread_exit e desbloquear o mutex
 
 ### Alta prioridade
 - [ ] Ao iniciar o cliente, os arquivos que foram modificados, deletados e adicionados ao sync_dir enquanto o cliente não estava online devem ser enviados ao servidor

@@ -20,6 +20,8 @@ __thread char user_sync_dir_path[256];
 __thread int sock;
 __thread CLIENT_t *pClientEntry; // pointer to client struct in client list
 
+pthread_mutex_t clientCreationLock = PTHREAD_MUTEX_INITIALIZER;
+
 TAILQ_HEAD(, tailq_entry) my_tailq_head;
 
 int main(int argc, char * argv[]) {
@@ -96,6 +98,8 @@ void receive_file(char *file) {
     struct utimbuf new_times;
     int file_i, file_found = -1, first_free_index = -1, i;
 
+    pthread_mutex_lock(&pClientEntry->mutex);
+
     // Search for file in user struct.
     for(file_i = 0; file_i < MAXFILES; file_i++) {
         if(strcmp(pClientEntry->file_info[file_i].name, file) == 0) {
@@ -116,10 +120,11 @@ void receive_file(char *file) {
     valread = read(sock, &client_file_time, sizeof(client_file_time));
 
     // If file already exists and server's version is newer, it's not transfered.
+    // TODO test if it's really working
     if((file_found >= 0) && (client_file_time < pClientEntry->file_info[file_found].last_modified)) {
         printf("Client file is older than server version\n");
     }
-    //FIXME logica nao ta bem certa...vai enviar OK semrpe.. e se nao enviar ok, oq vai acontecer com client? acho que nao ta comparandoa timestamp certo..
+    //FIXME logica nao ta bem certa?...vai enviar OK semrpe.. e se nao enviar ok, oq vai acontecer com client? acho que nao ta comparandoa timestamp certo..
 
     /* Create file where data will be stored */
     FILE *fp;
@@ -162,26 +167,30 @@ void receive_file(char *file) {
         pClientEntry->file_info[first_free_index].last_modified = client_file_time;
     }
 
+    pthread_mutex_unlock(&pClientEntry->mutex);
     // Send file to other connected devices of client
     for(i = 0; i < MAXDEVICES; i++ ) {
+        printf("FORA do if\n");
         if(pClientEntry->devices[i] != -1 && pClientEntry->devices[i] != sock) {
             sprintf(method, "PUSH %s", file);
+            printf("ANTES do write sock=%d\n", pClientEntry->devices_server[i]);
             write(pClientEntry->devices_server[i], method, sizeof(method));
+            printf("DEPOIS do write\n");
         }
     }
     // REVIEW tem que checar timestamp dos arquivos nos outros dispositivos antes de enviar pra eles? achoq nao, mas tem que confirmar isso e testar bem
+
 };
 
 void send_file(char * file) {
     char file_path[256];
-    int stat_result;
     struct stat st;
     int32_t length_converted;
 
     sprintf(file_path, "%s/%s", user_sync_dir_path, file);
-    stat_result = stat(file_path, &st);
 
-    if (stat_result == 0 && S_ISREG(st.st_mode)) { // If file exists
+    pthread_mutex_lock(&pClientEntry->mutex);
+    if (stat(file_path, &st) == 0 && S_ISREG(st.st_mode)) { // If file exists
         /* Open the file that we wish to transfer */
         FILE *fp = fopen(file_path,"rb");
         if (fp == NULL) {
@@ -223,6 +232,7 @@ void send_file(char * file) {
     } else {
         printf("File doesn't exist!\n");
     }
+    pthread_mutex_unlock(&pClientEntry->mutex);
 }
 
 void delete_file(char *file) {
@@ -230,6 +240,9 @@ void delete_file(char *file) {
     int file_i, found_file = 0, i;
     char method[METHODSIZE];
 
+    sprintf(file_path, "%s/%s", user_sync_dir_path, file);
+
+    pthread_mutex_lock(&pClientEntry->mutex);
     // Search for file in user struct.
     for(file_i = 0; file_i < MAXFILES; file_i++) {
         // Stop if file is found
@@ -239,8 +252,6 @@ void delete_file(char *file) {
             break;
         }
     }
-
-    sprintf(file_path, "%s/%s", user_sync_dir_path, file);
 
     if(found_file) {
         // Set it's area free
@@ -265,6 +276,7 @@ void delete_file(char *file) {
     } else {
         printf("File not found\n");
     }
+    pthread_mutex_unlock(&pClientEntry->mutex);
 };
 
 void list_files() {
@@ -273,6 +285,8 @@ void list_files() {
     int32_t nList = 0, nListConverted;
 
     printf("<~ %s requested LIST\n", username);
+
+    pthread_mutex_lock(&pClientEntry->mutex);
 
     // List files
     for (i = 0; i < MAXFILES; i++) {
@@ -291,12 +305,16 @@ void list_files() {
             write(sock, filename_string, strlen(filename_string));
         }
     }
+
+    pthread_mutex_unlock(&pClientEntry->mutex);
 }
 
 void free_device() {
     struct tailq_entry *client_node;
     struct tailq_entry *tmp_client_node;
-    // REVIEW is search correct?
+
+    pthread_mutex_lock(&pClientEntry->mutex);
+
     for (client_node = TAILQ_FIRST(&my_tailq_head); client_node != NULL; client_node = tmp_client_node) {
         if (strcmp(client_node->client_entry.userid, username) == 0) {
             // Set current sock device free
@@ -317,6 +335,8 @@ void free_device() {
         }
         tmp_client_node = TAILQ_NEXT(client_node, entries);
     }
+
+    pthread_mutex_unlock(&pClientEntry->mutex);
 }
 
 // Handle connection for each client
@@ -348,6 +368,8 @@ void *connection_handler(void *socket_desc) {
     // Create folder if it doesn't exist
     makedir_if_not_exists(user_sync_dir_path);
 
+    pthread_mutex_lock(&clientCreationLock);
+
     // Search for client in client list
     for (client_node = TAILQ_FIRST(&my_tailq_head); client_node != NULL; client_node = tmp_client_node) {
         if (strcmp(client_node->client_entry.userid, username) == 0) {
@@ -361,8 +383,10 @@ void *connection_handler(void *socket_desc) {
         // and is already connected in two devices, return an error message and close connection.
         if (client_node->client_entry.devices[0] > 0 && client_node->client_entry.devices[1] > 0) {
             printf("Client already connected in two devices. Closing connection...\n");
+            pthread_mutex_unlock(&clientCreationLock);
             shutdown(sock, 2);
             pthread_exit(nullReturn);
+
         }
         // If it's connected only in one device, connect the second device.
         device_to_use = (client_node->client_entry.devices[0] < 0) ? 0 : 1;
@@ -373,6 +397,7 @@ void *connection_handler(void *socket_desc) {
         client_node = malloc(sizeof(*client_node));
         if (client_node == NULL) {
             perror("malloc failed");
+            pthread_mutex_unlock(&clientCreationLock);
             pthread_exit(nullReturn);
         }
 
@@ -381,6 +406,7 @@ void *connection_handler(void *socket_desc) {
         client_node->client_entry.devices[1] = -1;
         strcpy(client_node->client_entry.userid, username);
         client_node->client_entry.logged_in = 1;
+        client_node->client_entry.mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 
         // Set size to -1 for all the files, so we can check if a slot is free later
         // REVIEW any better way to solve this?
@@ -409,6 +435,8 @@ void *connection_handler(void *socket_desc) {
         TAILQ_INSERT_TAIL(&my_tailq_head, client_node, entries);
     }
     pClientEntry = &(client_node->client_entry);
+
+    pthread_mutex_unlock(&clientCreationLock);
 
     // Send "OK" to confirm connection was accepted.
     write(sock, "OK", 2);

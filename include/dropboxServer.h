@@ -12,6 +12,7 @@ typedef struct file_info {
 } FILE_INFO_t;
 
 typedef struct client {
+  pthread_mutex_t mutex;
   int devices[MAXDEVICES]; // associado aos dispositivos do usuário
   int devices_server[MAXDEVICES]; // socket 'servidor' do cliente  // REVIEW explicar isso melhor
   char userid[MAXNAME]; // id do usuário no servidor, que deverá ser único. Informado pela linha de comando.
