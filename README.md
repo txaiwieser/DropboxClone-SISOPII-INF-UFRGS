@@ -5,6 +5,7 @@
 
 ## TO DO
 - [ ] Data de modificação dos arquivos nem sempre tá sendo salva. (comportamento muito aleatório)
+- [ ] Sincronizar ao conectar pela primeira vez
 
 ## Revisar / Finalizar
 - [ ] Tem como reutilizar mais código entre as funcoes de send e receive files? Modularizar melhor...

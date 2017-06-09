@@ -37,7 +37,6 @@ TAILQ_HEAD(, tailq_entry) my_tailq_head;
 
 // TODO Handle errors on send_file, get_file, receive_file (on server), send_file (on server). If file can't be opened, it should return an error and exit. Also, display success messages.
 void send_file(char *file) {
-    int stat_result;
     char method[METHODSIZE];
     struct stat st;
     char buffer[1024] = {0};
@@ -324,7 +323,7 @@ void sync_client() {
               // Converting from string to time_t
               struct tm tm;
               strptime(buf, "%F %T", &tm);
-              time_t t = mktime(&tm);
+              //time_t t = mktime(&tm);
 
               debug_printf("File %s modified %s", filename, buf);
           }
