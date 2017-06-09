@@ -235,7 +235,7 @@ void delete_file(char *file) {
         // Stop if file is found
         if(strcmp(pClientEntry->file_info[file_i].name, file) == 0) {
             found_file = 1;
-            printf("encontrou arquivo no struct!XXXXXXXXXXXXX\n");
+            //printf("encontrou arquivo no struct!XXXXXXXXXXXXX\n");
             break;
         }
     }
@@ -296,7 +296,7 @@ void list_files() {
 void free_device() {
     struct tailq_entry *client_node;
     struct tailq_entry *tmp_client_node;
-
+    // REVIEW is search correct?
     for (client_node = TAILQ_FIRST(&my_tailq_head); client_node != NULL; client_node = tmp_client_node) {
         if (strcmp(client_node->client_entry.userid, username) == 0) {
             // Set current sock device free

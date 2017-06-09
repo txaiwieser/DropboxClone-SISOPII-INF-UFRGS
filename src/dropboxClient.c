@@ -31,6 +31,7 @@ char *pIgnoredFileEntry; // pointer to ignored file in ignored files list
 #define BUF_LEN ( 1024 * ( EVENT_SIZE + 16 ) )
 
 pthread_mutex_t fileOperationMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t inotifyMutex = PTHREAD_MUTEX_INITIALIZER;
 
 TAILQ_HEAD(, tailq_entry) my_tailq_head;
 
@@ -145,27 +146,35 @@ void get_file(char *file, char *path) {
                 printf("\n Read Error \n");
             }
         }
+        pthread_mutex_lock(&inotifyMutex); // prevent inotify of getting file before it's inserted in ignored file list
         fclose (fp);
 
+        printf("TESTE 1");
         // Set modtime to original file modtime
         valread = read(sock, &original_file_time, sizeof(time_t));
         new_times.modtime = original_file_time; /* set mtime to original file time */
         new_times.actime = time(NULL); /* set atime to current time */
         utime(file_path, &new_times);
 
+        printf("TESTE 2");
         // If path is user_sync_dir, insert filename in the list of ignored files
         if(strcmp(user_sync_dir_path, path) == 0){
             ignoredfile_node = malloc(sizeof(*ignoredfile_node));
+            printf("TESTE 3");
             strcpy(ignoredfile_node->filename, file);
             if (ignoredfile_node == NULL) {
                 perror("malloc failed");
             }
+            printf("TESTE 4");
             TAILQ_INSERT_TAIL(&my_tailq_head, ignoredfile_node, entries);
             debug_printf("[Inseriu arquivo %s na lista pois foi baixado]\n", file);
         }
+        pthread_mutex_unlock(&inotifyMutex);
     } else {
+        printf("TESTE else");
         printf("There's already a file named %s in this directory\n", file);
     }
+    printf("TESTE 5");
 
     pthread_mutex_unlock(&fileOperationMutex);
 };
@@ -245,7 +254,7 @@ void save_list_of_files(){
   debug_printf("[Fechando .dropboxfiles]\n");
   fclose (fp);
 
-  pthread_mutex_lock(&fileOperationMutex);
+  pthread_mutex_unlock(&fileOperationMutex);
 }
 
 void cmdList() {
@@ -383,9 +392,11 @@ void* sync_daemon(void* unused) {
         while ( i < length ) {
             struct inotify_event *event = ( struct inotify_event * ) &buffer[ i ];
             if ( event->len ) {
+                pthread_mutex_lock(&inotifyMutex); // prevent inotify of getting file before it's inserted in ignored file list
                 if ( !(event->mask & IN_ISDIR) && event->name[0] != '.' ) { // If it's a file and it's not hidden
                     // Search for file in list of ignored files
                     for (ignoredfile_node = TAILQ_FIRST(&my_tailq_head); ignoredfile_node != NULL; ignoredfile_node = tmp_ignoredfile_node) {
+                        printf("ARQUIVO NA LISTA IGNORADO = %s\n", ignoredfile_node->filename);
                         if (strcmp(ignoredfile_node->filename, event->name) == 0) {
                             debug_printf("Daemon: Achou arquivo %s na lista\n", event->name);
                             break;
@@ -410,10 +421,11 @@ void* sync_daemon(void* unused) {
                         // Remove file from list
                         TAILQ_REMOVE(&my_tailq_head, ignoredfile_node, entries);
                         // REVIEW mutex?
-                        /* Free the item as we don’t need it anymore. */
+                        // Free the item as we don’t need it anymore.
                         free(ignoredfile_node);
                     }
                 }
+                pthread_mutex_unlock(&inotifyMutex);
             }
             i += EVENT_SIZE + event->len;
         }
@@ -421,7 +433,7 @@ void* sync_daemon(void* unused) {
     ( void ) inotify_rm_watch( fd, wd );
     ( void ) close( fd );
 
-    exit( 0 );
+    exit( 0 ); // REVIEW correto? fecha todsa threads?
 }
 
 // This thread receives requests from server
