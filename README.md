@@ -5,12 +5,13 @@
 
 ## Alta prioridade
 - [ ] Data de modificação dos arquivos nem sempre tá sendo salva. (comportamento muito aleatório)
-- [ ] Sincronizar ao conectar APENAS pela primeira vez. E se a pessoa der um get_sync_dir()?
-- [ ] inotify não tá pegando todos arquivos deletados às vezes?
+- [ ] Sincronizar ao conectar APENAS pela primeira vez. E se a pessoa der um get_sync_dir()? outra barreira?
+- [ ] às vezes o get_file recebe o tamanho do arquivo errado, e aí fica num loop infinito. (Talvez isso aconteça com outras funções como send_file também, pois a troca de mensagens é similar)
 
 ## Testes
 - [ ] Apagar arquivo remoto pelo comando delete o arquivo no dispositivo atual naota sendo apagado
 - [ ] E se usuário tenta baixar um arquivo que não existe?
+- [ ] inotify não tá pegando todos arquivos deletados às vezes?
 
 ## Revisar / Finalizar
 - [ ] Resolver TODOs

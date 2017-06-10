@@ -37,7 +37,9 @@ void send_file(char *file) {
     int valread;
     int32_t length_converted;
 
+    printf("send_file:antes fileOperationMutex lock\n");
     pthread_mutex_lock(&fileOperationMutex);
+    printf("send_file:depois fileOperationMutex lock\n");
 
     if (stat(file, &st) == 0 && S_ISREG(st.st_mode)) { // If file exists
         FILE *fp = fopen(file,"rb");
@@ -89,7 +91,9 @@ void send_file(char *file) {
         printf("File doesn't exist! Pass a valid filename.\n");
     }
 
+    printf("send_file:antes fileOperationMutex unlock\n");
     pthread_mutex_unlock(&fileOperationMutex);
+    printf("send_file:depois fileOperationMutex unlock\n");
 }
 
 void get_file(char *file, char *path) {
@@ -100,7 +104,9 @@ void get_file(char *file, char *path) {
     struct utimbuf new_times;
     struct tailq_entry *ignoredfile_node;
 
+    printf("get_file:antes fileOperationMutex lock\n");
     pthread_mutex_lock(&fileOperationMutex);
+    printf("get_file:depois fileOperationMutex lock\n");
 
     // If current directory is user_sync_dir, overwrite the file. It's another directory, get file only if there's no file with same filename
     if(!file_exists(file) || strcmp(user_sync_dir_path, path) == 0) {
@@ -121,20 +127,25 @@ void get_file(char *file, char *path) {
         if (NULL == fp) {
             printf("Error opening file");
         } else {
+            printf("get_file: 1\n");
             // Receive file size
             valread = read(sock, &nLeft, sizeof(nLeft));
             nLeft = ntohl(nLeft);
-
+            printf("get_file: 2\n");
             // Receive data in chunks
             while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
                 fwrite(buffer, 1, valread, fp);
                 nLeft -= valread;
+                printf("get_file: 3 nLeft=%d\n", nLeft);
             }
+            printf("get_file: 4\n");
             if (valread < 0) {
                 printf("\n Read Error \n");
             }
         }
+        printf("get_file: antes lock inotify\n");
         pthread_mutex_lock(&inotifyMutex); // prevent inotify of getting file before it's inserted in ignored file list
+        printf("get_file: depois lock inotify\n");
         fclose (fp);
 
         // Set modtime to original file modtime
@@ -157,8 +168,9 @@ void get_file(char *file, char *path) {
     } else {
         printf("There's already a file named %s in this directory\n", file);
     }
-
+    printf("get_file:antes fileOperationMutex unlock\n");
     pthread_mutex_unlock(&fileOperationMutex);
+    printf("get_file:depois fileOperationMutex unlock\n");
 };
 
 void delete_server_file(char *file) {
@@ -177,7 +189,8 @@ void delete_local_file(char *file) {
     struct tailq_entry *ignoredfile_node;
     sprintf(filepath, "%s/%s", user_sync_dir_path, file);
 
-    pthread_mutex_lock(&fileOperationMutex);
+    pthread_mutex_lock(&fileOperationMutex); // REVIEW it this mutex needed?
+    pthread_mutex_lock(&inotifyMutex); // prevent inotify of deleting file before it's inserted in ignored file list
 
     if(remove(filepath) == 0) {
         // Add to ignore list, so inotify doesn't send a DELETE method again to server
@@ -190,7 +203,9 @@ void delete_local_file(char *file) {
         debug_printf("[Inseriu arquivo %s na lista pois foi apagado primeiramente em outro dispositivo]\n", file);
     };
 
+    pthread_mutex_unlock(&inotifyMutex);
     pthread_mutex_unlock(&fileOperationMutex);
+
 };
 
 // Save list of files into user_sync_dir_path/.dropboxfiles
@@ -388,25 +403,25 @@ void* sync_daemon(void* unused) {
                         tmp_ignoredfile_node = TAILQ_NEXT(ignoredfile_node, entries);
                     }
 
-                    pthread_mutex_unlock(&inotifyMutex);
-
-                    // If it's not in the list, it was modified locally, so changes need to be propagated to server
-                    if(ignoredfile_node == NULL) {
+                    // If it's in the list, remove it
+                    if(ignoredfile_node != NULL) {
+                        TAILQ_REMOVE(&ignoredfiles_tailq_head, ignoredfile_node, entries);
+                        pthread_mutex_unlock(&inotifyMutex);
+                    } else {
+                        // It's not in the list, so it was modified locally and changes need to be propagated to server
+                        pthread_mutex_unlock(&inotifyMutex);
                         if ( (event->mask & IN_CLOSE_WRITE) || (event->mask & IN_MOVED_TO)  ) {
-                            debug_printf( "The file %s was created, modified, or moved from somewhere.\n", event->name );
+                            debug_printf( "[Daemon: The file %s was created, modified, or moved from somewhere.]\n", event->name );
                             sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
                             send_file(filepath);
                         } else if ( event->mask & IN_DELETE  ) {
-                            debug_printf( "The file %s was deleted.\n", event->name );
+                            debug_printf( "[Daemon: The file %s was deleted.]\n", event->name );
                             delete_server_file(event->name);
                         } else if ( event->mask & IN_MOVED_FROM  ) {
-                            debug_printf( "The file %s was renamed.\n", event->name );
+                            debug_printf( "[Daemon: The file %s was renamed.]\n", event->name );
                             sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
                             delete_server_file(event->name);
                         }
-                    } else {
-                        // Remove file from list
-                        TAILQ_REMOVE(&ignoredfiles_tailq_head, ignoredfile_node, entries);
                     }
                 }
             }

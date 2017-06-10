@@ -136,7 +136,7 @@ void sync_server() {
     // Send filenames
     for (i = 0; i < MAXFILES; i++) {
         if (pClientEntry->file_info[i].size != FREE_FILE_SIZE) {
-            printf("Nome do arquivo: %s\n", pClientEntry->file_info[i].name);
+            printf("[PUSH %s to %s's device %d]\n", pClientEntry->file_info[i].name, username, d);
             sprintf(method, "PUSH %s", pClientEntry->file_info[i].name);
             write(pClientEntry->devices_server[d], method, sizeof(method));
         }
@@ -181,6 +181,7 @@ void receive_file(char *file) {
         // Send server file to client
         for(i = 0; i < MAXDEVICES; i++ ) {
             if(pClientEntry->devices[i] == sock) {
+                printf("[PUSH %s to %s's device %d]\n", file, pClientEntry->userid, i);
                 sprintf(method, "PUSH %s", file);
                 write(pClientEntry->devices_server[i], method, sizeof(method));
             }
@@ -229,6 +230,7 @@ void receive_file(char *file) {
         // Send file to other connected devices
         for(i = 0; i < MAXDEVICES; i++ ) {
             if(pClientEntry->devices[i] != INVALIDSOCKET && pClientEntry->devices[i] != sock) {
+                printf("[PUSH %s to %s's device %d]\n", file, pClientEntry->userid, i);
                 sprintf(method, "PUSH %s", file);
                 write(pClientEntry->devices_server[i], method, sizeof(method));
             }
@@ -328,6 +330,7 @@ void delete_file(char *file) {
         // Delete file from other connected devices
         for(i = 0; i < MAXDEVICES; i++ ) {
             if(pClientEntry->devices[i] != INVALIDSOCKET && pClientEntry->devices[i] != sock) {
+                printf("[DELETE %s to %s's device %d]\n", file, pClientEntry->userid, i);
                 sprintf(method, "DELETE %s", file);
                 write(pClientEntry->devices_server[i], method, sizeof(method));
             }
