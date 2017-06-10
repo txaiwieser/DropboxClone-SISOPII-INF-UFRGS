@@ -108,8 +108,41 @@ int main(int argc, char * argv[]) {
     return 0;
 }
 
+// Send number of files to client and send PUSH for each file
 void sync_server() {
-    // TODO sync_server()
+    char method[METHODSIZE];
+    int i, d;
+    int32_t nList = 0, nListConverted;
+
+    printf("<~ %s requested SYNC\n", username);
+
+    pthread_mutex_lock(&pClientEntry->mutex);
+
+    // Calculate number of files and send to client
+    for (i = 0; i < MAXFILES; i++) {
+        if (pClientEntry->file_info[i].size != FREE_FILE_SIZE)
+            nList += strlen(pClientEntry->file_info[i].name) + 1;
+    }
+    nListConverted = htonl(nList);
+    write(sock, &nListConverted, sizeof(nListConverted));
+
+    // Find current device
+    for(d = 0; d < MAXDEVICES; d++ ) {
+        if(pClientEntry->devices[d] == sock) {
+            break;
+        }
+    }
+
+    // Send filenames
+    for (i = 0; i < MAXFILES; i++) {
+        if (pClientEntry->file_info[i].size != FREE_FILE_SIZE) {
+            printf("Nome do arquivo: %s\n", pClientEntry->file_info[i].name);
+            sprintf(method, "PUSH %s", pClientEntry->file_info[i].name);
+            write(pClientEntry->devices_server[d], method, sizeof(method));
+        }
+    }
+
+    pthread_mutex_unlock(&pClientEntry->mutex);
 }
 
 void receive_file(char *file) {
@@ -486,6 +519,9 @@ void *connection_handler(void *socket_desc) {
         } else if (!strncmp(client_message, "DELETE", 6)) {
             printf("Request method: DELETE\n");
             delete_file(client_message + 7);
+        } else if (!strncmp(client_message, "SYNC", 4)) {
+            printf("Request method: SYNC\n");
+            sync_server();
         }
     }
 

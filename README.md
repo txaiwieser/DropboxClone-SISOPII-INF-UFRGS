@@ -5,11 +5,11 @@
 
 ## Alta prioridade
 - [ ] Data de modificação dos arquivos nem sempre tá sendo salva. (comportamento muito aleatório)
-- [ ] Sincronizar ao conectar pela primeira vez
+- [ ] Sincronizar ao conectar APENAS pela primeira vez. E se a pessoa der um get_sync_dir()?
 - [ ] inotify não tá pegando todos arquivos deletados às vezes?
 
 ## Testes
-- [ ] Apagar arquiv oremoto pelo comando delete o arquivo no dispositivo atual naota sendo apagado
+- [ ] Apagar arquivo remoto pelo comando delete o arquivo no dispositivo atual naota sendo apagado
 - [ ] E se usuário tenta baixar um arquivo que não existe?
 
 ## Revisar / Finalizar

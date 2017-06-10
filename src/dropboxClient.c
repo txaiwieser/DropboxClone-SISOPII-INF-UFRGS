@@ -24,6 +24,8 @@ char server_host[256], server_user[MAXNAME], user_sync_dir_path[256];
 int server_port = 0, sock = 0;
 char *pIgnoredFileEntry; // Pointer to list of ignored files. It's used by inotify to prevent uploading a file that has just best downloaded.
 
+pthread_barrier_t syncbarrier;
+
 pthread_mutex_t fileOperationMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t inotifyMutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -257,6 +259,7 @@ void cmdList() {
 void cmdGetSyncDir() {
     // Create user sync_dir if it doesn't exist
     makedir_if_not_exists(user_sync_dir_path);
+    // TODO remover sync_client();
     // TODO sync_dir here! Mutex?
 };
 
@@ -277,8 +280,17 @@ void cmdExit() {
 }
 
 void sync_client() {
+    int32_t nLeft;
+
     pthread_mutex_lock(&fileOperationMutex);
     debug_printf("[Syncing...]\n");
+
+    send(sock, "SYNC", 4, 0);
+
+    // Receive number of files
+    read(sock, &nLeft, sizeof(nLeft));
+    nLeft = ntohl(nLeft);
+    printf("passou\n");
 
     /* TODO Sync modifications since last logout
 
@@ -448,6 +460,8 @@ void* local_server(void* unused) {
     addrlen = sizeof(struct sockaddr_in);
     while ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen))) {
 
+        pthread_barrier_wait(&syncbarrier);
+
         // Receive a message from server
         while ((read_size = recv(new_socket, server_message, METHODSIZE, 0)) > 0 ) {
             // end of string marker
@@ -506,7 +520,9 @@ int main(int argc, char * argv[]) {
     // Define path to user sync_dir folder
     sprintf(user_sync_dir_path, "%s/sync_dir_%s", getenv("HOME"), server_user);
 
-    // Create user sync_dir if it not exists
+    pthread_barrier_init(&syncbarrier, NULL, 2);
+
+    // Create user sync_dir
     cmdGetSyncDir();
 
     // Send username to server
@@ -531,8 +547,12 @@ int main(int argc, char * argv[]) {
         return 1;
     }
 
-    // Sync client
+    // Create user sync_dir if it not exists
+    printf("Syncing...");
+    // TODO barreira  para esperar par amostrar terminal
+    pthread_barrier_wait(&syncbarrier); // wait for local_server connection
     sync_client();
+    printf("Done.\n\n");
 
     printf("Welcome to Dropbox! - v 1.0\n");
     cmdMan();
