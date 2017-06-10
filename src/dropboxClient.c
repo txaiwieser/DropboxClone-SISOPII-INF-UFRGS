@@ -38,7 +38,7 @@ void send_file(char *file) {
 
     pthread_mutex_lock(&fileOperationMutex);
 
-    if (file_exists(file)) {
+    if (stat(file, &st) == 0 && S_ISREG(st.st_mode)) { // If file exists
         FILE *fp = fopen(file,"rb");
         if (fp == NULL) {
             printf("Couldn't open the file\n");
