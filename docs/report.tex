@@ -1,0 +1,94 @@
+\documentclass[a4paper]{article}
+
+%% Language and font encodings
+\usepackage[brazilian]{babel}
+\usepackage[utf8x]{inputenc}
+\usepackage[T1]{fontenc}
+
+%% Sets page size and margins
+\usepackage[a4paper,top=3cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+
+%% Useful packages
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[colorinlistoftodos]{todonotes}
+\usepackage[colorlinks=true, allcolors=blue]{hyperref}
+
+\title{Dropbox - Parte I}
+\author{Augusto Bennemann, Fabrício Martins Mazzola e Txai Wieser}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Your abstract.
+\end{abstract}
+
+\section{Ambiente de desenvolvimento e teste}
+
+O projeto foi desenvolvido utilizando um ambiente com as seguintes caracteristicas:
+\begin{itemize}
+	\item Configuração da máquina:
+	\begin{itemize}
+		\item Processador(es):
+		\item Memória:
+	\end{itemize}
+
+	\item{Sistema operacional}: 
+	\begin{itemize}
+		\item Distribuição:
+		\item Versão:
+	\end{itemize}
+
+	\item Software suporte:
+	\begin{itemize}
+		\item Compiladores (versões):
+	\end{itemize}
+\end{itemize}
+
+\section{Descrições e justificativas}
+
+\subsection{Funcionamento}
+(threads, metodos do ‘protocolo de aplicação’)
+
+\subsection{Concorrência no servidor}
+
+\subsection{Sincronização}
+
+\subsection{Comunicação}
+
+\subsection{Estruturas e funções adicionais}
+
+\subsubsection{dropboxUtil}
+\begin{itemize}
+	\item void makedir\_if\_not\_exists(const char* path)
+	\newline Verifica se o diretório especificado no parâmetro `path` existe e caso contrario o cria.
+	
+	\item int file\_exists(const char* path)
+	\newline Verifica se o diretório especificado no parâmetro `path` existe.
+
+	\item int connect\_server(char * host, int port)
+	\newline Conecta ao servidor.
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+\end{itemize}
+\subsection{Testes}
+
+\section{Dificuldades encontradas}
+ 
+\bibliographystyle{alpha}
+\bibliography{sample}
+
+\end{document}
