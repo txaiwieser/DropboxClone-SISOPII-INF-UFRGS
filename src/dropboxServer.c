@@ -11,6 +11,7 @@
 #include <time.h>
 #include <utime.h>
 #include <pthread.h>
+#include <signal.h>
 #include <unistd.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxServer.h"
@@ -24,10 +25,34 @@ pthread_mutex_t clientCreationLock = PTHREAD_MUTEX_INITIALIZER;
 
 TAILQ_HEAD(, tailq_entry) my_tailq_head;
 
+// Exits gracefully. Close all connections
+// TODO add mutex? prevent interrupting file transfers
+void graceful_exit(int signum) {
+    int i;
+    char method[] = "CLOSE";
+    struct tailq_entry *client_node;
+
+    printf("\nClosing all connections...\n");
+    TAILQ_FOREACH(client_node, &my_tailq_head, entries) {
+        for(i = 0; i < MAXDEVICES; i++ ) {
+            if(client_node->client_entry.devices[i] != INVALIDSOCKET && client_node->client_entry.devices[i] != sock) {
+                write(client_node->client_entry.devices_server[i], method, sizeof(method));
+                printf("~> Sent CLOSE to %s's device %d\n", client_node->client_entry.userid, i);
+            }
+        }
+    }
+    printf("Exiting.\n");
+    exit(0);
+}
+
 int main(int argc, char * argv[]) {
     int server_fd, new_socket, port;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
+    struct sigaction action;
+    memset(&action, 0, sizeof(struct sigaction));
+    action.sa_handler = graceful_exit;
+    sigaction(SIGINT, &action, NULL);
 
     // Check number of parameters
     if (argc != 2) {
@@ -36,7 +61,7 @@ int main(int argc, char * argv[]) {
     }
 
     port = atoi(argv[1]);
-    printf("Server started on port %d\n", port);
+    printf("Server started on port %d\nPress Ctrl + C to exit gracefully\n", port);
 
     // Initialize the tail queue
     TAILQ_INIT(&my_tailq_head);
@@ -170,12 +195,9 @@ void receive_file(char *file) {
     pthread_mutex_unlock(&pClientEntry->mutex);
     // Send file to other connected devices of client
     for(i = 0; i < MAXDEVICES; i++ ) {
-        printf("FORA do if\n");
-        if(pClientEntry->devices[i] != -1 && pClientEntry->devices[i] != sock) {
+        if(pClientEntry->devices[i] != INVALIDSOCKET && pClientEntry->devices[i] != sock) {
             sprintf(method, "PUSH %s", file);
-            printf("ANTES do write sock=%d\n", pClientEntry->devices_server[i]);
             write(pClientEntry->devices_server[i], method, sizeof(method));
-            printf("DEPOIS do write\n");
         }
     }
     // REVIEW tem que checar timestamp dos arquivos nos outros dispositivos antes de enviar pra eles? achoq nao, mas tem que confirmar isso e testar bem
@@ -454,7 +476,7 @@ void *connection_handler(void *socket_desc) {
 
         if (!strncmp(client_message, "LIST", 4)) {
             list_files();
-            printf("~> List of files sent to %s\n", username);
+            printf("~> List of files sent to %s on device %d\n", username, device_to_use);
         } else if (!strncmp(client_message, "DOWNLOAD", 8)) {
             printf("Request method: DOWNLOAD\n");
             send_file(client_message + 9);

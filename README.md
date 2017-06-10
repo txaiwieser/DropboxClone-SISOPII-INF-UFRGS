@@ -15,7 +15,7 @@
 - [ ] Liberar memória, free() ...
 - [ ] Mensagens de debug: usar sempre debug_printf; colocar "Dropbox>" no cliente? Desativar da compilação final
 - [ ] Testar e confirmar se o tratamento de erros está adequado
-- [ ] Confirmar que threads estão sendo fechadas ao encerrar execução. (Problema com porta deveria sumir em caso afirmativo, certo?)
+- [ ] Ao fechar servidor, avisar cliente? sair gracefully com ctrl c. aí nao interromper se tiver algo sendo transferido... pthread join?
 
 ## Extra
 - [ ] Ao iniciar o cliente, os arquivos que foram modificados, deletados e adicionados ao sync_dir enquanto o cliente não estava online devem ser enviados ao servidor

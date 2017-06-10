@@ -482,11 +482,17 @@ void* local_server(void* unused) {
             server_message[read_size] = '\0';
 
             if (!strncmp(server_message, "PUSH", 4)) {
-                printf("received PUSH from server\n");
+                debug_printf("[received PUSH from server]\n");
                 get_file(server_message + 5, user_sync_dir_path);
             } else if (!strncmp(server_message, "DELETE", 6)) {
-                printf("received DELETE from server\n");
+                debug_printf("[received DELETE from server]\n");
                 delete_local_file(server_message + 7);
+            } else if (!strncmp(server_message, "CLOSE", 5)) {
+                debug_printf("[received CLOSE from server]\n");
+                printf("\nServer disconnected. Closing connection...");
+                close_connection();
+                exit(0);
+                // TODO mutex? how to exit correctly?
             }
         }
 
@@ -591,7 +597,7 @@ int main(int argc, char * argv[]) {
 }
 
 void close_connection() {
-    // TODO mutex to prevent of closing while transfering a file
+    // TODO mutex to prevent closing while transfering a file
     // Stop both reception and transmission.
     shutdown(sock, 2);
 }
