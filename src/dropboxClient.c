@@ -148,32 +148,26 @@ void get_file(char *file, char *path) {
         pthread_mutex_lock(&inotifyMutex); // prevent inotify of getting file before it's inserted in ignored file list
         fclose (fp);
 
-        printf("TESTE 1");
         // Set modtime to original file modtime
         valread = read(sock, &original_file_time, sizeof(time_t));
         new_times.modtime = original_file_time; /* set mtime to original file time */
         new_times.actime = time(NULL); /* set atime to current time */
         utime(file_path, &new_times);
 
-        printf("TESTE 2");
         // If path is user_sync_dir, insert filename in the list of ignored files
         if(strcmp(user_sync_dir_path, path) == 0) {
             ignoredfile_node = malloc(sizeof(*ignoredfile_node));
-            printf("TESTE 3");
             strcpy(ignoredfile_node->filename, file);
             if (ignoredfile_node == NULL) {
                 perror("malloc failed");
             }
-            printf("TESTE 4");
             TAILQ_INSERT_TAIL(&my_tailq_head, ignoredfile_node, entries);
             debug_printf("[Inseriu arquivo %s na lista pois foi baixado]\n", file);
         }
         pthread_mutex_unlock(&inotifyMutex);
     } else {
-        printf("TESTE else");
         printf("There's already a file named %s in this directory\n", file);
     }
-    printf("TESTE 5");
 
     pthread_mutex_unlock(&fileOperationMutex);
 };
@@ -392,9 +386,8 @@ void* sync_daemon(void* unused) {
                 if ( !(event->mask & IN_ISDIR) && event->name[0] != '.' ) { // If it's a file and it's not hidden
                     // Search for file in list of ignored files
                     for (ignoredfile_node = TAILQ_FIRST(&my_tailq_head); ignoredfile_node != NULL; ignoredfile_node = tmp_ignoredfile_node) {
-                        printf("ARQUIVO NA LISTA IGNORADO = %s\n", ignoredfile_node->filename);
                         if (strcmp(ignoredfile_node->filename, event->name) == 0) {
-                            debug_printf("Daemon: Achou arquivo %s na lista\n", event->name);
+                            debug_printf("[Daemon: Found file %s in ignored files list]\n", event->name);
                             break;
                         }
                         tmp_ignoredfile_node = TAILQ_NEXT(ignoredfile_node, entries);
@@ -489,7 +482,7 @@ void* local_server(void* unused) {
                 delete_local_file(server_message + 7);
             } else if (!strncmp(server_message, "CLOSE", 5)) {
                 debug_printf("[received CLOSE from server]\n");
-                printf("\nServer disconnected. Closing connection...");
+                printf("Server disconnected. Closing connection...");
                 close_connection();
                 exit(0);
                 // TODO mutex? how to exit correctly?
@@ -543,7 +536,7 @@ int main(int argc, char * argv[]) {
     // Detect if connection was closed
     valread = read(sock, buffer, sizeof(buffer));
     if (valread == 0) {
-        printf("%s already connected in two devices. Closing connection...\n", server_user);
+        printf("%s is already connected in two devices. Closing connection...\n", server_user);
         return 0;
     }
 
@@ -561,7 +554,6 @@ int main(int argc, char * argv[]) {
 
     // Sync client
     sync_client();
-    debug_printf("[Device synced]\n");
 
     printf("Welcome to Dropbox! - v 1.0\n");
     cmdMan();
