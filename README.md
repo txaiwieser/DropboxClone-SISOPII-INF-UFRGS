@@ -13,8 +13,10 @@
 - [ ] Comentar bem o código
 - [ ] Checar se tamanhos de strings e tipos usados são suficientes e adequados (alguns lugares tá usando int32_t, mas melhor nao seria usar uint32_t?)
 - [ ] Liberar memória, free() ...
-- [ ] Mensagens de debug: usar sempre debug_printf; colocar "Dropbox>" no cliente? Desativar da compilação final
+- [ ] Mensagens de debug: colocar "Dropbox>" no cliente?
 - [ ] Testar e confirmar se o tratamento de erros está adequado
+- [ ] Testar muito bem para garantir que mutex estão corretos (movi o do inotify mas não cheguei a testar muito bem)
+- [ ] Desativar debug da compilação final
 
 ## Extra
 - [ ] Ao iniciar o cliente, os arquivos que foram modificados, deletados e adicionados ao sync_dir enquanto o cliente não estava online devem ser enviados ao servidor

@@ -382,8 +382,9 @@ void* sync_daemon(void* unused) {
         while ( i < length ) {
             struct inotify_event *event = ( struct inotify_event * ) &buffer[ i ];
             if ( event->len ) {
-                pthread_mutex_lock(&inotifyMutex); // prevent inotify of getting file before it's inserted in ignored file list
                 if ( !(event->mask & IN_ISDIR) && event->name[0] != '.' ) { // If it's a file and it's not hidden
+                    pthread_mutex_lock(&inotifyMutex); // prevent inotify of getting file before it's inserted in ignored file list
+
                     // Search for file in list of ignored files
                     for (ignoredfile_node = TAILQ_FIRST(&my_tailq_head); ignoredfile_node != NULL; ignoredfile_node = tmp_ignoredfile_node) {
                         if (strcmp(ignoredfile_node->filename, event->name) == 0) {
@@ -392,14 +393,15 @@ void* sync_daemon(void* unused) {
                         }
                         tmp_ignoredfile_node = TAILQ_NEXT(ignoredfile_node, entries);
                     }
+
+                    pthread_mutex_unlock(&inotifyMutex);
+
                     // If it's not in the list, it was modified locally, so changes need to be propagated to server
                     if(ignoredfile_node == NULL) {
                         if ( (event->mask & IN_CLOSE_WRITE) || (event->mask & IN_MOVED_TO)  ) {
                             debug_printf( "The file %s was created, modified, or moved from somewhere.\n", event->name );
                             sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
-                            pthread_mutex_unlock(&inotifyMutex);
                             send_file(filepath);
-                            pthread_mutex_lock(&inotifyMutex);
                         } else if ( event->mask & IN_DELETE  ) {
                             debug_printf( "The file %s was deleted.\n", event->name );
                             delete_server_file(event->name);
@@ -415,7 +417,6 @@ void* sync_daemon(void* unused) {
                         free(ignoredfile_node);
                     }
                 }
-                pthread_mutex_unlock(&inotifyMutex);
             }
             i += EVENT_SIZE + event->len;
         }
