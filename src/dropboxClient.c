@@ -25,7 +25,7 @@ char server_host[256];
 int server_port = 0, sock = 0;
 char server_user[MAXNAME];
 char user_sync_dir_path[256];
-char *pIgnoredFileEntry; // pointer to ignored file in ignored files list
+char *pIgnoredFileEntry; // Pointer to list of ignored files. It's used by inotify to prevent uploading a file that has just best downloaded.
 
 #define EVENT_SIZE  ( sizeof (struct inotify_event) )
 #define BUF_LEN ( 1024 * ( EVENT_SIZE + 16 ) )
@@ -55,7 +55,7 @@ void send_file(char *file) {
             sprintf(method, "UPLOAD %s", basename(file));
 
             // Call to the server
-            write(sock, method, sizeof(method)); // REVIEW Usando sizeof funciona, mas usando strlen dá bug a partir do segundo arquvio. tá certo? (atencao, se alterar, nao esquecer de mudar nas outras funcoes q fazem exatamente a mesma coisa)
+            write(sock, method, sizeof(method));
             debug_printf("[%s method sent]\n", method);
 
             // Send file modtime
@@ -157,7 +157,7 @@ void get_file(char *file, char *path) {
 
         printf("TESTE 2");
         // If path is user_sync_dir, insert filename in the list of ignored files
-        if(strcmp(user_sync_dir_path, path) == 0){
+        if(strcmp(user_sync_dir_path, path) == 0) {
             ignoredfile_node = malloc(sizeof(*ignoredfile_node));
             printf("TESTE 3");
             strcpy(ignoredfile_node->filename, file);
@@ -213,47 +213,47 @@ void delete_local_file(char *file) {
 };
 
 // Save list of files into user_sync_dir_path/.dropboxfiles
-void save_list_of_files(){
-  // TODO autosave every x seconds? or maybe everytime there's a file change?
-  struct dirent **namelist;
-  int n, i;
-  FILE *fp;
-  struct stat st;
-  char filepath[MAXNAME], stfpath[MAXNAME];
-  sprintf(filepath, "%s/.dropboxfiles", user_sync_dir_path);
+void save_list_of_files() {
+    // TODO Autosave every x seconds? or maybe everytime there's a file change?
+    struct dirent **namelist;
+    int n, i;
+    FILE *fp;
+    struct stat st;
+    char filepath[MAXNAME], stfpath[MAXNAME];
+    sprintf(filepath, "%s/.dropboxfiles", user_sync_dir_path);
 
-  pthread_mutex_lock(&fileOperationMutex);
+    pthread_mutex_lock(&fileOperationMutex);
 
-  fp = fopen(filepath, "w");
-  if (NULL == fp) {
-      printf("Error opening file");
-  } else {
-      n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
+    fp = fopen(filepath, "w");
+    if (NULL == fp) {
+        printf("Error opening file");
+    } else {
+        n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
 
-      if (n > 2) { // Starting in i=2, it ignores '.' and '..'
-          for (i = 2; i < n; i++) {
-              sprintf(stfpath, "%s/%s", user_sync_dir_path, namelist[i]->d_name);
-              stat(stfpath, &st);
-              if(namelist[i]->d_name[0] != '.' && !(st.st_mode & S_IFDIR)) { // If it's a file and it's not hidden
-                  // Save filename
-                  fwrite(namelist[i]->d_name, strlen(namelist[i]->d_name), 1, fp);
-                  fwrite("\n", 1, 1, fp);
-                  // and timestamp
-                  struct tm *ptm = gmtime(&st.st_mtime);
-                  char buf[256];
-                  strftime(buf, sizeof buf, "%F %T", ptm);
-                  fwrite(buf, strlen(buf), 1, fp);
-                  fwrite("\n", 1, 1, fp);
+        if (n > 2) { // Starting in i=2, it ignores '.' and '..'
+            for (i = 2; i < n; i++) {
+                sprintf(stfpath, "%s/%s", user_sync_dir_path, namelist[i]->d_name);
+                stat(stfpath, &st);
+                if(namelist[i]->d_name[0] != '.' && !(st.st_mode & S_IFDIR)) { // If it's a file and it's not hidden
+                    // Save filename
+                    fwrite(namelist[i]->d_name, strlen(namelist[i]->d_name), 1, fp);
+                    fwrite("\n", 1, 1, fp);
+                    // and timestamp
+                    struct tm *ptm = gmtime(&st.st_mtime);
+                    char buf[256];
+                    strftime(buf, sizeof buf, "%F %T", ptm);
+                    fwrite(buf, strlen(buf), 1, fp);
+                    fwrite("\n", 1, 1, fp);
 
-                  free(namelist[i]);
-              }
-          }
-      }
-  }
-  debug_printf("[Fechando .dropboxfiles]\n");
-  fclose (fp);
+                    free(namelist[i]);
+                }
+            }
+        }
+    }
+    debug_printf("[Closing .dropboxfiles]\n");
+    fclose (fp);
 
-  pthread_mutex_unlock(&fileOperationMutex);
+    pthread_mutex_unlock(&fileOperationMutex);
 }
 
 void cmdList() {
@@ -306,60 +306,60 @@ void sync_client() {
 
     debug_printf("[Syncing...]\n");
 
+    /* TODO Sync modifications since last logout
+
     // Open .dropboxfiles if it exists
-    if(stat(filepath, &st) == 0){
-      fp = fopen(filepath, "r");
-      if (NULL == fp) {
-          printf("Error opening file");
-      } else {
-          // Read filenames with timestamps
-          while(fgets(filename, sizeof(filename), fp)){
-              // Remove \n at end of string
-              size_t ln = strlen(filename)-1;
-              if (filename[ln] == '\n')
-                  filename[ln] = '\0';
+    if (stat(filepath, &st) == 0) {
+        fp = fopen(filepath, "r");
+        if (NULL == fp) {
+            printf("Error opening file");
+        } else {
+            // Read filenames with timestamps
+            while(fgets(filename, sizeof(filename), fp)) {
+                // Remove \n at end of string
+                size_t ln = strlen(filename)-1;
+                if (filename[ln] == '\n')
+                    filename[ln] = '\0';
 
-              fgets(buf, sizeof(buf), fp);
-              // Converting from string to time_t
-              struct tm tm;
-              strptime(buf, "%F %T", &tm);
-              //time_t t = mktime(&tm);
+                fgets(buf, sizeof(buf), fp);
+                // Converting from string to time_t
+                struct tm tm;
+                strptime(buf, "%F %T", &tm);
+                //time_t t = mktime(&tm);
 
-              debug_printf("File %s modified %s", filename, buf);
-          }
-          // TODO compare with server and then sync.
-      }
-      fclose(fp);
+                debug_printf("File %s modified %s", filename, buf);
+            }
+            // TODO compare with server and then sync.
+        }
+        fclose(fp);
 
-      /* TODO If a file listed on .dropboxfiles doesn't exist anymore,
-      user deleted it. So, delete it on server and other devices too.
-      delete_server_file("filename");
-      */
+        /*
+        If a file listed on .dropboxfiles doesn't exist anymore,
+        user deleted it. So, delete it on server and other devices too.
+        delete_server_file("filename");
 
-      /* TODO If a file listed on .dropboxfiles exists locally, but not on server,
-      it means it was deleted by another device. So, delete it locally (without propagating to server).
-      delete_local_file("filename");
-      */
+        If a file listed on .dropboxfiles exists locally, but not on server,
+        it means it was deleted by another device. So, delete it locally (without propagating to server).
+        delete_local_file("filename");
 
-      /* TODO If there's a file that isn't listed on .dropboxfiles, it was created after
-      last sync. So, upload it to the server.
-      send_file("filename");
-      */
+        If there's a file that isn't listed on .dropboxfiles, it was created after
+        last sync. So, upload it to the server.
+        send_file("filename");
 
-      /* TODO If a file is listed on .dropboxfiles, exists locally and on server,
-      need to check what's the newer version, and update it on client or server.
-      if (localversion newer) send_file("filename");
-      else if (remoteversion newer) get_file("filename");
-      */
+        TODO If a file is listed on .dropboxfiles, exists locally and on server,
+        need to check what's the newer version, and update it on client or server.
+        if (localversion newer) send_file("filename");
+        else if (remoteversion newer) get_file("filename");
 
-      // REVIEW any other case?
+        // REVIEW any other case?
+
+        */
     }
     debug_printf("[Syncing done]\n");
     pthread_mutex_unlock(&fileOperationMutex);
 }
 
 void* sync_daemon(void* unused) {
-    // TODO Não enviar arquivo se ele foi recém baixado. Por exemplo, quando o servidor manda um PUSH pro cliente, este baixa o arquivo e aí o inotify acha que o arquivo foi criado, entao tenta enviá-lo ao servidor, que por sua vez envia push de novo.. ? Testar melhor. Talvez está faltando comparar timestamp na hora de receber um arquivo no servidor?
     int length;
     int fd;
     int wd;
@@ -403,7 +403,7 @@ void* sync_daemon(void* unused) {
                         tmp_ignoredfile_node = TAILQ_NEXT(ignoredfile_node, entries);
                     }
                     // If it's not in the list, it was modified locally, so changes need to be propagated to server
-                    if(ignoredfile_node == NULL){
+                    if(ignoredfile_node == NULL) {
                         if ( (event->mask & IN_CLOSE_WRITE) || (event->mask & IN_MOVED_TO)  ) {
                             debug_printf( "The file %s was created, modified, or moved from somewhere.\n", event->name );
                             sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
@@ -421,7 +421,6 @@ void* sync_daemon(void* unused) {
                     } else {
                         // Remove file from list
                         TAILQ_REMOVE(&my_tailq_head, ignoredfile_node, entries);
-                        // REVIEW mutex?
                         // Free the item as we don’t need it anymore.
                         free(ignoredfile_node);
                     }
@@ -453,8 +452,8 @@ void* local_server(void* unused) {
     }
 
     address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY; // REVIEW INADDR_ANY? IP?
-    address.sin_port = 0; // auto assign port // REVIEW check bind return to confirm it succeded https://stackoverflow.com/questions/10294515/how-do-i-find-in-c-that-a-port-is-free-to-use
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = 0; // auto assign port
 
     // Forcefully attaching socket to the port
     if (bind(server_fd, (struct sockaddr *) &address, sizeof(address)) < 0) {
@@ -595,6 +594,7 @@ int main(int argc, char * argv[]) {
 }
 
 void close_connection() {
+    // TODO mutex to prevent of closing while transfering a file
     // Stop both reception and transmission.
     shutdown(sock, 2);
 }

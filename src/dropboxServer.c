@@ -255,8 +255,8 @@ void delete_file(char *file) {
 
     if(found_file) {
         // Set it's area free
-        strcpy(pClientEntry->file_info[file_i].name, "olaaaaaaa.txt"); // REVIEW why olaaaaaaa?
-        pClientEntry->file_info[file_i].last_modified = time(NULL); // REVIEW set to current time. anything better?
+        strcpy(pClientEntry->file_info[file_i].name, "filename.ext");
+        pClientEntry->file_info[file_i].last_modified = time(NULL);
         pClientEntry->file_info[file_i].size = FREE_FILE_SIZE;
         // Erase file
         if (remove(file_path) == 0) {
@@ -266,7 +266,6 @@ void delete_file(char *file) {
         }
 
         // Delete file from other connected devices
-        // TODO TEST!!
         for(i = 0; i < MAXDEVICES; i++ ) {
             if(pClientEntry->devices[i] != -1 && pClientEntry->devices[i] != sock) {
                 sprintf(method, "DELETE %s", file);
@@ -319,15 +318,15 @@ void free_device() {
         if (strcmp(client_node->client_entry.userid, username) == 0) {
             // Set current sock device free
             if (client_node->client_entry.devices[0] == sock) {
-                client_node->client_entry.devices[0] = -1;
-                client_node->client_entry.devices_server[0] = -1;
+                client_node->client_entry.devices[0] = INVALIDSOCKET;
+                client_node->client_entry.devices_server[0] = INVALIDSOCKET;
             } else if (client_node->client_entry.devices[1] == sock) {
-                client_node->client_entry.devices[1] = -1;
-                client_node->client_entry.devices_server[1] = -1; // TODO create constants
+                client_node->client_entry.devices[1] = INVALIDSOCKET;
+                client_node->client_entry.devices_server[1] = INVALIDSOCKET;
             }
 
             // Set logged_in to 0 if user is not connected anymore in any device.
-            if (client_node->client_entry.devices[0] == -1 && client_node->client_entry.devices[0] == -1) {
+            if (client_node->client_entry.devices[0] == INVALIDSOCKET && client_node->client_entry.devices[0] == INVALIDSOCKET) {
                 client_node->client_entry.logged_in = 0;
             }
 
@@ -403,13 +402,12 @@ void *connection_handler(void *socket_desc) {
 
         device_to_use = 0;
         client_node->client_entry.devices[0] = sock;
-        client_node->client_entry.devices[1] = -1;
+        client_node->client_entry.devices[1] = INVALIDSOCKET;
         strcpy(client_node->client_entry.userid, username);
         client_node->client_entry.logged_in = 1;
         client_node->client_entry.mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 
-        // Set size to -1 for all the files, so we can check if a slot is free later
-        // REVIEW any better way to solve this?
+        // Set size to FREE_FILE_SIZE for all the files, so we can check if a slot is free later
         for (i = 0; i < MAXFILES; i++) {
             client_node->client_entry.file_info[i].size = FREE_FILE_SIZE;
         }
