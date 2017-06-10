@@ -7,16 +7,16 @@
 - [ ] Data de modificação dos arquivos nem sempre tá sendo salva. (comportamento muito aleatório)
 - [ ] Sincronizar ao conectar pela primeira vez
 - [ ] inotify não tá pegando todos arquivos deletados às vezes?
-- [ ] Comparações de data de mdificação tão em todos lugares necessários e estao funcionando?
 
 ## Testes
-- [ ] Testar se ao apagar arquiv oremoto pelo comando delete o arquivo no dispositivo atual é apagado
+- [ ] Apagar arquiv oremoto pelo comando delete o arquivo no dispositivo atual naota sendo apagado
 - [ ] E se usuário tenta baixar um arquivo que não existe?
 
 ## Revisar / Finalizar
 - [ ] Resolver TODOs
 - [ ] Testar muito bem para garantir que mutex estão corretos (movi o do inotify mas não cheguei a testar muito bem). Testar tratamento de erros. Testar interface com DEBUG=0.
 - [ ] Desativar debug da compilação final
+- warning valread
 
 ## Extra
 - [ ] Ao iniciar o cliente, os arquivos que foram modificados, deletados e adicionados ao sync_dir enquanto o cliente não estava online devem ser enviados ao servidor

@@ -143,56 +143,67 @@ void receive_file(char *file) {
     // If file already exists and server's version is newer, it's not transfered.
     if((file_found >= 0) && (client_file_time < pClientEntry->file_info[file_found].last_modified)) {
         printf("Client file is older than server version\n");
-    }
-    //FIXME O arquivo está sendo aberto depois e enviando "OK" mesmo quando o arquivo do cliente é mais velho q a versao do servidor. Testar se ta comparando timestamp certa. O que a especificação diz mesmo?
-
-    /* Create file where data will be stored */
-    FILE *fp;
-    fp = fopen(file_path, "wb");
-    if (NULL == fp) {
-        printf("Error opening file");
-    } else {
-        // Send "OK" to confirm file was created and is newer than the server version, so it should be transfered
-        write(sock, "OK", 2);
-
-        // Receive file size
-        valread = read(sock, &file_size, sizeof(file_size));
-        nLeft = ntohl(file_size);
-
-        // Receive data in chunks
-        while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
-            fwrite(buffer, 1, valread, fp);
-            nLeft -= valread;
+        write(sock, "ERROR", 5);
+        pthread_mutex_unlock(&pClientEntry->mutex);
+        // Send server file to client
+        for(i = 0; i < MAXDEVICES; i++ ) {
+            if(pClientEntry->devices[i] == sock) {
+                sprintf(method, "PUSH %s", file);
+                write(pClientEntry->devices_server[i], method, sizeof(method));
+            }
         }
-        if (valread < 0) {
-            printf("\n Read Error \n");
+    } else{
+      /* Create file where data will be stored */
+      FILE *fp;
+      fp = fopen(file_path, "wb");
+      if (NULL == fp) {
+          printf("Error opening file");
+          write(sock, "ERROR", 5);
+          pthread_mutex_unlock(&pClientEntry->mutex);
+      } else {
+          // Send "OK" to confirm file was created and is newer than the server version, so it should be transfered
+          write(sock, "OK", 2);
+
+          // Receive file size
+          valread = read(sock, &file_size, sizeof(file_size));
+          nLeft = ntohl(file_size);
+
+          // Receive data in chunks
+          while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
+              fwrite(buffer, 1, valread, fp);
+              nLeft -= valread;
+          }
+          if (valread < 0) {
+              printf("\n Read Error \n");
+          }
+
+        new_times.modtime = client_file_time; // set mtime to original file time
+        new_times.actime = time(NULL); // set atime to current time
+        utime(file_path, &new_times);
+
+        // If file already exists on client file list, update it. Otherwise, insert it.
+        if(file_found >= 0) {
+            pClientEntry->file_info[file_found].size = file_size;
+            pClientEntry->file_info[file_found].last_modified = client_file_time;
+        } else {
+            strcpy(pClientEntry->file_info[first_free_index].name, file);
+            pClientEntry->file_info[first_free_index].size = file_size;
+            pClientEntry->file_info[first_free_index].last_modified = client_file_time;
         }
-    }
-    debug_printf("[Receive file: Closing file]\n");
-    fclose (fp);
 
-    new_times.modtime = client_file_time; // set mtime to original file time
-    new_times.actime = time(NULL); // set atime to current time
-    utime(file_path, &new_times);
+        pthread_mutex_unlock(&pClientEntry->mutex);
 
-    // If file already exists on client file list, update it. Otherwise, insert it.
-    if(file_found >= 0) {
-        pClientEntry->file_info[file_found].size = file_size;
-        pClientEntry->file_info[file_found].last_modified = client_file_time;
-    } else {
-        strcpy(pClientEntry->file_info[first_free_index].name, file);
-        pClientEntry->file_info[first_free_index].size = file_size;
-        pClientEntry->file_info[first_free_index].last_modified = client_file_time;
-    }
-
-    pthread_mutex_unlock(&pClientEntry->mutex);
-
-    // Send file to other connected devices
-    for(i = 0; i < MAXDEVICES; i++ ) {
-        if(pClientEntry->devices[i] != INVALIDSOCKET && pClientEntry->devices[i] != sock) {
-            sprintf(method, "PUSH %s", file);
-            write(pClientEntry->devices_server[i], method, sizeof(method));
+        // Send file to other connected devices
+        for(i = 0; i < MAXDEVICES; i++ ) {
+            if(pClientEntry->devices[i] != INVALIDSOCKET && pClientEntry->devices[i] != sock) {
+                sprintf(method, "PUSH %s", file);
+                write(pClientEntry->devices_server[i], method, sizeof(method));
+            }
         }
+
+        debug_printf("[Receive file: Closing file]\n");
+        fclose (fp);
+      }
     }
 
     // REVIEW tem que checar timestamp dos arquivos nos outros dispositivos antes de enviar pra eles? achoq nao, mas tem que confirmar isso e testar bem

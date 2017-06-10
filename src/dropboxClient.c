@@ -54,7 +54,7 @@ void send_file(char *file) {
 
             // Detect if file was created and local version is newer than server version, so file must be transfered
             valread = read(sock, buffer, sizeof(buffer));
-            if (valread > 0) {
+            if (strcmp(buffer, "OK") == 0) {
                 // Send file size to server
                 length_converted = htonl(st.st_size);
                 write(sock, &length_converted, sizeof(length_converted));
