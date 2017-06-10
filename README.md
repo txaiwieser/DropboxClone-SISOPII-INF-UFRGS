@@ -9,10 +9,7 @@
 
 ## Revisar / Finalizar
 - [ ] Resolver TODOs
-- [ ] testar renomeacao de arquivo no inotify
-- [ ] Tem como reutilizar e modularizar o código melhor?
 - [ ] Checar se tamanhos de strings e tipos usados são suficientes e adequados (alguns lugares tá usando int32_t, mas melhor nao seria usar uint32_t?)
-- [ ] Liberar memória, free() ...
 - [ ] Mensagens de debug: colocar "Dropbox>" no cliente?
 - [ ] Testar e confirmar se o tratamento de erros está adequado
 - [ ] Testar muito bem para garantir que mutex estão corretos (movi o do inotify mas não cheguei a testar muito bem)

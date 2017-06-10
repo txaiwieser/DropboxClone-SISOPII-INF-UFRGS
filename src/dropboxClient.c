@@ -153,6 +153,7 @@ void get_file(char *file, char *path) {
             }
             TAILQ_INSERT_TAIL(&ignoredfiles_tailq_head, ignoredfile_node, entries);
             debug_printf("[Added %s to list of ignored files because it has just been downloaded.]\n", file);
+            free(ignoredfile_node);
         }
         pthread_mutex_unlock(&inotifyMutex);
     } else {
@@ -191,6 +192,7 @@ void delete_local_file(char *file) {
         }
         TAILQ_INSERT_TAIL(&ignoredfiles_tailq_head, ignoredfile_node, entries);
         debug_printf("[Inseriu arquivo %s na lista pois foi apagado primeiramente em outro dispositivo]\n", file);
+        free(ignoredfile_node);
     };
 
     pthread_mutex_unlock(&fileOperationMutex);
@@ -431,7 +433,7 @@ void* local_server(void* unused) {
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = 0; // auto assign port
 
-    // Forcefully attaching socket to the port
+    // Attach socket to the port
     if (bind(server_fd, (struct sockaddr *) &address, sizeof(address)) < 0) {
         perror("bind failed");
         exit(EXIT_FAILURE);
