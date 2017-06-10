@@ -12,7 +12,7 @@
 
 pthread_mutex_t fileMutex = PTHREAD_MUTEX_INITIALIZER;
 
-/* Mensagens de debug */
+// Debug messages, displayed only when DEBUG=1
 void debug_printf(const char* message, ...) {
     if(DEBUG) {
         va_list args;
@@ -22,6 +22,7 @@ void debug_printf(const char* message, ...) {
     }
 }
 
+// Create dir if it doesn't exist
 void makedir_if_not_exists(const char* path) {
     pthread_mutex_lock(&fileMutex);
     struct stat st = {0};
@@ -31,10 +32,11 @@ void makedir_if_not_exists(const char* path) {
     pthread_mutex_unlock(&fileMutex);
 }
 
+// If file exists and is a file (not a directory)
 int file_exists(const char* path) {
     pthread_mutex_lock(&fileMutex);
     struct stat st = {0};
-    int stat_result = (stat(path, &st) == 0);
+    int stat_result = (stat(path, &st) == 0) && S_ISREG(st.st_mode);
     pthread_mutex_unlock(&fileMutex);
     return stat_result;
 }
