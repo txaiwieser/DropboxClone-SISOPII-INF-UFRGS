@@ -6,6 +6,7 @@
 ## Alta prioridade
 - [ ] Data de modificação dos arquivos nem sempre tá sendo salva. (comportamento muito aleatório)
 - [ ] Sincronizar ao conectar pela primeira vez
+- [ ] inotify não tá pegando todos arquivos deletados às vezes?
 
 ## Revisar / Finalizar
 - [ ] Resolver TODOs
@@ -18,6 +19,7 @@
 
 ### Ideias (abandonadas no momento)
 - [ ] Se a conexão com o servidor cair, o cliente poderia ser avisado
+- [ ] free(ignoredfile_node)? tirei porque aparentemente gerou segfault em algum momento
 - [ ] Ver se o retorno do write e read foi completo, sempre? Alberto disse que tem uma chance remota de isso dar problema. Em localhost deve ser muito raro.
 - [ ] Criar outro socket só p upload e download, como alberto falou na aula? nao entendi direito
 - [ ] Barra de progresso ao fazer download e upload?

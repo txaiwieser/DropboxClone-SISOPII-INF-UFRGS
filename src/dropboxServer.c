@@ -208,7 +208,7 @@ void send_file(char * file) {
 
     pthread_mutex_lock(&pClientEntry->mutex);
 
-    if (stat(file, &st) == 0 && S_ISREG(st.st_mode)) { // If file exists
+    if (stat(file_path, &st) == 0 && S_ISREG(st.st_mode)) { // If file exists
         FILE *fp = fopen(file_path,"rb");
         if (fp == NULL) {
             length_converted = htonl(0);

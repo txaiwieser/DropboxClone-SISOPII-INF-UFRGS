@@ -153,7 +153,7 @@ void get_file(char *file, char *path) {
             }
             TAILQ_INSERT_TAIL(&ignoredfiles_tailq_head, ignoredfile_node, entries);
             debug_printf("[Added %s to list of ignored files because it has just been downloaded.]\n", file);
-            free(ignoredfile_node);
+            //free(ignoredfile_node);
         }
         pthread_mutex_unlock(&inotifyMutex);
     } else {
@@ -192,7 +192,7 @@ void delete_local_file(char *file) {
         }
         TAILQ_INSERT_TAIL(&ignoredfiles_tailq_head, ignoredfile_node, entries);
         debug_printf("[Inseriu arquivo %s na lista pois foi apagado primeiramente em outro dispositivo]\n", file);
-        free(ignoredfile_node);
+        //free(ignoredfile_node);
     };
 
     pthread_mutex_unlock(&fileOperationMutex);
@@ -403,7 +403,7 @@ void* sync_daemon(void* unused) {
                         // Remove file from list
                         TAILQ_REMOVE(&ignoredfiles_tailq_head, ignoredfile_node, entries);
                         // Free the item as we don’t need it anymore.
-                        free(ignoredfile_node);
+                        //free(ignoredfile_node);
                     }
                 }
             }
