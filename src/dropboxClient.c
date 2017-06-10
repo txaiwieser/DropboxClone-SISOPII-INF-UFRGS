@@ -121,50 +121,56 @@ void get_file(char *file, char *path) {
         write(sock, method, sizeof(method));
         debug_printf("[%s method sent]\n", method);
 
-        // Create file where data will be stored
-        FILE *fp;
-        fp = fopen(file_path, "wb");
-        if (NULL == fp) {
-            printf("Error opening file");
+        // Detect if server accepted transmission
+        valread = read(sock, buffer, sizeof(buffer));
+        if (strcmp(buffer, "OK") == 0) {
+          // Create file where data will be stored
+          FILE *fp;
+          fp = fopen(file_path, "wb");
+          if (NULL == fp) {
+              printf("Error opening file");
+          } else {
+              printf("get_file: 1\n");
+              // Receive file size
+              valread = read(sock, &nLeft, sizeof(nLeft));
+              nLeft = ntohl(nLeft);
+              printf("get_file: 2\n");
+              // Receive data in chunks
+              while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
+                  fwrite(buffer, 1, valread, fp);
+                  nLeft -= valread;
+                  printf("get_file: 3 nLeft=%d\n", nLeft);
+              }
+              printf("get_file: 4\n");
+              if (valread < 0) {
+                  printf("\n Read Error \n");
+              }
+          }
+          printf("get_file: antes lock inotify\n");
+          pthread_mutex_lock(&inotifyMutex); // prevent inotify of getting file before it's inserted in ignored file list
+          printf("get_file: depois lock inotify\n");
+          fclose (fp);
+
+          // Set modtime to original file modtime
+          valread = read(sock, &original_file_time, sizeof(time_t));
+          new_times.modtime = original_file_time; // set mtime to original file time
+          new_times.actime = time(NULL); // set atime to current time
+          utime(file_path, &new_times);
+
+          // If path is user_sync_dir, insert filename in the list of ignored files
+          if(strcmp(user_sync_dir_path, path) == 0) {
+              ignoredfile_node = malloc(sizeof(*ignoredfile_node));
+              strcpy(ignoredfile_node->filename, file);
+              if (ignoredfile_node == NULL) {
+                  perror("malloc failed");
+              }
+              TAILQ_INSERT_TAIL(&ignoredfiles_tailq_head, ignoredfile_node, entries);
+              debug_printf("[Added %s to list of ignored files because it has just been downloaded.]\n", file);
+          }
+          pthread_mutex_unlock(&inotifyMutex);
         } else {
-            printf("get_file: 1\n");
-            // Receive file size
-            valread = read(sock, &nLeft, sizeof(nLeft));
-            nLeft = ntohl(nLeft);
-            printf("get_file: 2\n");
-            // Receive data in chunks
-            while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
-                fwrite(buffer, 1, valread, fp);
-                nLeft -= valread;
-                printf("get_file: 3 nLeft=%d\n", nLeft);
-            }
-            printf("get_file: 4\n");
-            if (valread < 0) {
-                printf("\n Read Error \n");
-            }
+          printf("Invalid filename\n");
         }
-        printf("get_file: antes lock inotify\n");
-        pthread_mutex_lock(&inotifyMutex); // prevent inotify of getting file before it's inserted in ignored file list
-        printf("get_file: depois lock inotify\n");
-        fclose (fp);
-
-        // Set modtime to original file modtime
-        valread = read(sock, &original_file_time, sizeof(time_t));
-        new_times.modtime = original_file_time; // set mtime to original file time
-        new_times.actime = time(NULL); // set atime to current time
-        utime(file_path, &new_times);
-
-        // If path is user_sync_dir, insert filename in the list of ignored files
-        if(strcmp(user_sync_dir_path, path) == 0) {
-            ignoredfile_node = malloc(sizeof(*ignoredfile_node));
-            strcpy(ignoredfile_node->filename, file);
-            if (ignoredfile_node == NULL) {
-                perror("malloc failed");
-            }
-            TAILQ_INSERT_TAIL(&ignoredfiles_tailq_head, ignoredfile_node, entries);
-            debug_printf("[Added %s to list of ignored files because it has just been downloaded.]\n", file);
-        }
-        pthread_mutex_unlock(&inotifyMutex);
     } else {
         printf("There's already a file named %s in this directory\n", file);
     }

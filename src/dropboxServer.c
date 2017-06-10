@@ -256,10 +256,12 @@ void send_file(char * file) {
     if (stat(file_path, &st) == 0 && S_ISREG(st.st_mode)) { // If file exists
         FILE *fp = fopen(file_path,"rb");
         if (fp == NULL) {
-            length_converted = htonl(0);
-            write(sock, &length_converted, sizeof(length_converted));
             printf("File open error");
+            write(sock, "ERROR", 5);
         } else {
+            // Send "OK" exists and was opened
+            write(sock, "OK", 2);
+
             // Send file size to client
             length_converted = htonl(st.st_size);
             write(sock, &length_converted, sizeof(length_converted));
@@ -292,6 +294,7 @@ void send_file(char * file) {
         write(sock, &st.st_mtime, sizeof(st.st_mtime)); // TODO use htonl and ntohl?
     } else {
         printf("File doesn't exist!\n");
+        write(sock, "ERROR", 5);
     }
     pthread_mutex_unlock(&pClientEntry->mutex);
 }
