@@ -29,7 +29,6 @@ pthread_mutex_t inotifyMutex = PTHREAD_MUTEX_INITIALIZER;
 
 TAILQ_HEAD(, tailq_entry) ignoredfiles_tailq_head;
 
-// TODO Handle errors on send_file, get_file, receive_file (on server), send_file (on server). If file can't be opened, it should return an error and exit. Also, display success messages.
 void send_file(char *file) {
     struct stat st;
     char buffer[1024] = {0}, method[METHODSIZE];
@@ -114,8 +113,6 @@ void get_file(char *file, char *path) {
         write(sock, method, sizeof(method));
         debug_printf("[%s method sent]\n", method);
 
-        // TODO If file doesn't exist on server, return an error message.
-
         // Create file where data will be stored
         FILE *fp;
         fp = fopen(file_path, "wb");
@@ -181,8 +178,6 @@ void delete_local_file(char *file) {
     pthread_mutex_lock(&fileOperationMutex);
 
     if(remove(filepath) == 0) {
-        // REVIEW Success.  print a message? return a value?
-
         // Add to ignore list, so inotify doesn't send a DELETE method again to server
         ignoredfile_node = malloc(sizeof(*ignoredfile_node));
         strcpy(ignoredfile_node->filename, file);
@@ -313,7 +308,7 @@ void sync_client() {
 
                 debug_printf("File %s modified %s", filename, buf);
             }
-            // TODO compare with server and then sync.
+            // Compare with server and then sync.
         }
         fclose(fp);
 

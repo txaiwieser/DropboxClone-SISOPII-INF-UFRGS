@@ -141,11 +141,10 @@ void receive_file(char *file) {
     valread = read(sock, &client_file_time, sizeof(client_file_time));
 
     // If file already exists and server's version is newer, it's not transfered.
-    // TODO test if it's really working
     if((file_found >= 0) && (client_file_time < pClientEntry->file_info[file_found].last_modified)) {
         printf("Client file is older than server version\n");
     }
-    //FIXME logica nao ta bem certa?...vai enviar OK semrpe.. e se nao enviar ok, oq vai acontecer com client? acho que nao ta comparandoa timestamp certo..
+    //FIXME O arquivo está sendo aberto depois e enviando "OK" mesmo quando o arquivo do cliente é mais velho q a versao do servidor. Testar se ta comparando timestamp certa. O que a especificação diz mesmo?
 
     /* Create file where data will be stored */
     FILE *fp;
@@ -154,7 +153,7 @@ void receive_file(char *file) {
         printf("Error opening file");
     } else {
         // Send "OK" to confirm file was created and is newer than the server version, so it should be transfered
-        write(sock, "OK", 2); // REVIEW precisa disso ou só colocamos pra resolver o problema que tava acontecendo ao ler o length?
+        write(sock, "OK", 2);
 
         // Receive file size
         valread = read(sock, &file_size, sizeof(file_size));
@@ -439,9 +438,7 @@ void *connection_handler(void *socket_desc) {
 
                 free(namelist[i]);
             }
-        } /*else {
-        perror("Couldn't open the directory or it's empty"); // REVIEW handle error?
-    }*/
+        }
         free(namelist);
 
         TAILQ_INSERT_TAIL(&clients_tailq_head, client_node, entries);

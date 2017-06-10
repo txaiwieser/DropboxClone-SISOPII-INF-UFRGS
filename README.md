@@ -7,6 +7,11 @@
 - [ ] Data de modificação dos arquivos nem sempre tá sendo salva. (comportamento muito aleatório)
 - [ ] Sincronizar ao conectar pela primeira vez
 - [ ] inotify não tá pegando todos arquivos deletados às vezes?
+- [ ] Comparações de data de mdificação tão em todos lugares necessários e estao funcionando?
+
+## Testes
+- [ ] Testar se ao apagar arquiv oremoto pelo comando delete o arquivo no dispositivo atual é apagado
+- [ ] E se usuário tenta baixar um arquivo que não existe?
 
 ## Revisar / Finalizar
 - [ ] Resolver TODOs
@@ -23,3 +28,4 @@
 - [ ] Criar outro socket só p upload e download, como alberto falou na aula? nao entendi direito
 - [ ] Barra de progresso ao fazer download e upload?
 - [ ] Segurança: se o usuário passar um filename com "../" vai baixar algum arquivo indevido? Pode até baixar arquivo de outra pessoa. (Atualmente isso ta gerando um segfault.. teria que tratar)
+- [ ] Tratamento de erros: funções send_file, get_file, receive_file (on server), send_file (on server). Se arquivo não pode ser aberto, deve retornar um erro e sair. Exibir mensagens de sucesso também?
