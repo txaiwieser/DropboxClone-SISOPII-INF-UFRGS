@@ -9,10 +9,7 @@
 
 ## Revisar / Finalizar
 - [ ] Resolver TODOs
-- [ ] Checar se tamanhos de strings e tipos usados são suficientes e adequados (alguns lugares tá usando int32_t, mas melhor nao seria usar uint32_t?)
-- [ ] Mensagens de debug: colocar "Dropbox>" no cliente?
-- [ ] Testar e confirmar se o tratamento de erros está adequado
-- [ ] Testar muito bem para garantir que mutex estão corretos (movi o do inotify mas não cheguei a testar muito bem)
+- [ ] Testar muito bem para garantir que mutex estão corretos (movi o do inotify mas não cheguei a testar muito bem). Testar tratamento de erros. Testar interface com DEBUG=0.
 - [ ] Desativar debug da compilação final
 
 ## Extra
