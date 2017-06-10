@@ -9,8 +9,8 @@
 
 ## Revisar / Finalizar
 - [ ] Resolver TODOs
+- [ ] testar renomeacao de arquivo no inotify
 - [ ] Tem como reutilizar e modularizar o código melhor?
-- [ ] Comentar bem o código
 - [ ] Checar se tamanhos de strings e tipos usados são suficientes e adequados (alguns lugares tá usando int32_t, mas melhor nao seria usar uint32_t?)
 - [ ] Liberar memória, free() ...
 - [ ] Mensagens de debug: colocar "Dropbox>" no cliente?

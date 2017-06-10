@@ -16,24 +16,22 @@
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxServer.h"
 
-__thread char username[MAXNAME];
-__thread char user_sync_dir_path[256];
+__thread char username[MAXNAME], user_sync_dir_path[256];
 __thread int sock;
-__thread CLIENT_t *pClientEntry; // pointer to client struct in client list
+__thread CLIENT_t *pClientEntry; // pointer to client struct in list of clients
 
-pthread_mutex_t clientCreationLock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t clientCreationLock = PTHREAD_MUTEX_INITIALIZER; // prevent concurrent login
 
-TAILQ_HEAD(, tailq_entry) my_tailq_head;
+TAILQ_HEAD(, tailq_entry) clients_tailq_head; // List of clients
 
-// Exits gracefully. Close all connections
-// TODO add mutex? prevent interrupting file transfers
+// Exits gracefully, closing all connections and without interrupting file transfers. TODO add mutex? prevent interrupting file transfers
 void graceful_exit(int signum) {
     int i;
     char method[] = "CLOSE";
     struct tailq_entry *client_node;
 
     printf("\nClosing all connections...\n");
-    TAILQ_FOREACH(client_node, &my_tailq_head, entries) {
+    TAILQ_FOREACH(client_node, &clients_tailq_head, entries) {
         for(i = 0; i < MAXDEVICES; i++ ) {
             if(client_node->client_entry.devices[i] != INVALIDSOCKET && client_node->client_entry.devices[i] != sock) {
                 write(client_node->client_entry.devices_server[i], method, sizeof(method));
@@ -46,13 +44,9 @@ void graceful_exit(int signum) {
 }
 
 int main(int argc, char * argv[]) {
-    int server_fd, new_socket, port;
     struct sockaddr_in address;
-    int addrlen = sizeof(address);
+    int server_fd, new_socket, port, addrlen;
     struct sigaction action;
-    memset(&action, 0, sizeof(struct sigaction));
-    action.sa_handler = graceful_exit;
-    sigaction(SIGINT, &action, NULL);
 
     // Check number of parameters
     if (argc != 2) {
@@ -64,7 +58,12 @@ int main(int argc, char * argv[]) {
     printf("Server started on port %d\nPress Ctrl + C to exit gracefully\n", port);
 
     // Initialize the tail queue
-    TAILQ_INIT(&my_tailq_head);
+    TAILQ_INIT(&clients_tailq_head);
+
+    // SIGINT handling
+    memset(&action, 0, sizeof(struct sigaction));
+    action.sa_handler = graceful_exit;
+    sigaction(SIGINT, &action, NULL);
 
     // Creating socket file descriptor
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
@@ -76,7 +75,7 @@ int main(int argc, char * argv[]) {
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port);
 
-    // Forcefully attaching socket to the port
+    // Attach socket to the port
     if (bind(server_fd, (struct sockaddr *) &address, sizeof(address)) < 0) {
         perror("bind failed");
         exit(EXIT_FAILURE);
@@ -114,18 +113,15 @@ void sync_server() {
 }
 
 void receive_file(char *file) {
-    int valread;
+    int valread, file_i, file_found = -1, first_free_index = -1, i;
     int32_t nLeft, file_size;
-    char buffer[1024] = {0};
-    char method[METHODSIZE];
-    char file_path[256];
+    char buffer[1024] = {0}, method[METHODSIZE], file_path[256];
     time_t client_file_time;
     struct utimbuf new_times;
-    int file_i, file_found = -1, first_free_index = -1, i;
 
     pthread_mutex_lock(&pClientEntry->mutex);
 
-    // Search for file in user struct.
+    // Search for file in user's list of files
     for(file_i = 0; file_i < MAXFILES; file_i++) {
         if(strcmp(pClientEntry->file_info[file_i].name, file) == 0) {
             file_found = file_i;
@@ -133,7 +129,7 @@ void receive_file(char *file) {
         }
     }
 
-    // Find the next free index
+    // Find the next free slot in user's list of files
     for(file_i = 0; file_i < MAXFILES; file_i++) {
         if(pClientEntry->file_info[file_i].size == FREE_FILE_SIZE && first_free_index == -1)
             first_free_index = file_i;
@@ -141,7 +137,7 @@ void receive_file(char *file) {
 
     sprintf(file_path, "%s/%s", user_sync_dir_path, file);
 
-    // Receive original filetime
+    // Receive file modification time
     valread = read(sock, &client_file_time, sizeof(client_file_time));
 
     // If file already exists and server's version is newer, it's not transfered.
@@ -160,11 +156,11 @@ void receive_file(char *file) {
         // Send "OK" to confirm file was created and is newer than the server version, so it should be transfered
         write(sock, "OK", 2); // REVIEW precisa disso ou só colocamos pra resolver o problema que tava acontecendo ao ler o length?
 
-        // Receive length
+        // Receive file size
         valread = read(sock, &file_size, sizeof(file_size));
         nLeft = ntohl(file_size);
 
-        /* Receive data in chunks */
+        // Receive data in chunks
         while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
             fwrite(buffer, 1, valread, fp);
             nLeft -= valread;
@@ -173,35 +169,34 @@ void receive_file(char *file) {
             printf("\n Read Error \n");
         }
     }
-    debug_printf("Fechando arquivo\n");
+    debug_printf("[Receive file: Closing file]\n");
     fclose (fp);
 
-    new_times.modtime = client_file_time; /* set mtime to original file time */
-    new_times.actime = time(NULL); /* set atime to current time */
+    new_times.modtime = client_file_time; // set mtime to original file time
+    new_times.actime = time(NULL); // set atime to current time
     utime(file_path, &new_times);
 
-    // If file already exists on client file list
+    // If file already exists on client file list, update it. Otherwise, insert it.
     if(file_found >= 0) {
-        // Update
         pClientEntry->file_info[file_found].size = file_size;
         pClientEntry->file_info[file_found].last_modified = client_file_time;
     } else {
-        // If it doesn't, insert it
         strcpy(pClientEntry->file_info[first_free_index].name, file);
         pClientEntry->file_info[first_free_index].size = file_size;
         pClientEntry->file_info[first_free_index].last_modified = client_file_time;
     }
 
     pthread_mutex_unlock(&pClientEntry->mutex);
-    // Send file to other connected devices of client
+
+    // Send file to other connected devices
     for(i = 0; i < MAXDEVICES; i++ ) {
         if(pClientEntry->devices[i] != INVALIDSOCKET && pClientEntry->devices[i] != sock) {
             sprintf(method, "PUSH %s", file);
             write(pClientEntry->devices_server[i], method, sizeof(method));
         }
     }
-    // REVIEW tem que checar timestamp dos arquivos nos outros dispositivos antes de enviar pra eles? achoq nao, mas tem que confirmar isso e testar bem
 
+    // REVIEW tem que checar timestamp dos arquivos nos outros dispositivos antes de enviar pra eles? achoq nao, mas tem que confirmar isso e testar bem
 };
 
 void send_file(char * file) {
@@ -212,30 +207,30 @@ void send_file(char * file) {
     sprintf(file_path, "%s/%s", user_sync_dir_path, file);
 
     pthread_mutex_lock(&pClientEntry->mutex);
-    if (stat(file_path, &st) == 0 && S_ISREG(st.st_mode)) { // If file exists
-        /* Open the file that we wish to transfer */
+
+    if (file_exists(file_path)) {
         FILE *fp = fopen(file_path,"rb");
         if (fp == NULL) {
             length_converted = htonl(0);
             write(sock, &length_converted, sizeof(length_converted));
             printf("File open error");
         } else {
-            /* Send file size to client */
+            // Send file size to client
             length_converted = htonl(st.st_size);
             write(sock, &length_converted, sizeof(length_converted));
 
-            /* Read data from file and send it */
+            // Read data from file and send it
             while (1) {
-                /* First read file in chunks of 1024 bytes */
+                // First read file in chunks of 1024 bytes
                 unsigned char buff[1024] = {0};
                 int nread = fread(buff, 1, sizeof(buff), fp);
 
-                /* If read was success, send data. */
+                // If read was success, send data.
                 if (nread > 0) {
                     write(sock, buff, nread);
                 }
 
-                /* Either there was error, or reached end of file */
+                // Either there was error, or reached end of file
                 if (nread < sizeof(buff)) {
                     /*if (feof(fp))
                         debug_printf("End of file\n"); */
@@ -248,9 +243,8 @@ void send_file(char * file) {
         }
         fclose(fp);
 
-        // Send file modtime
-        // TODO use htonl and ntohl?
-        write(sock, &st.st_mtime, sizeof(st.st_mtime));
+        // Send file modification time
+        write(sock, &st.st_mtime, sizeof(st.st_mtime)); // TODO use htonl and ntohl?
     } else {
         printf("File doesn't exist!\n");
     }
@@ -265,12 +259,12 @@ void delete_file(char *file) {
     sprintf(file_path, "%s/%s", user_sync_dir_path, file);
 
     pthread_mutex_lock(&pClientEntry->mutex);
-    // Search for file in user struct.
+
+    // Search for file in user's list of files
     for(file_i = 0; file_i < MAXFILES; file_i++) {
-        // Stop if file is found
+        // Stop if it is found
         if(strcmp(pClientEntry->file_info[file_i].name, file) == 0) {
             found_file = 1;
-            //printf("encontrou arquivo no struct!XXXXXXXXXXXXX\n");
             break;
         }
     }
@@ -280,6 +274,7 @@ void delete_file(char *file) {
         strcpy(pClientEntry->file_info[file_i].name, "filename.ext");
         pClientEntry->file_info[file_i].last_modified = time(NULL);
         pClientEntry->file_info[file_i].size = FREE_FILE_SIZE;
+
         // Erase file
         if (remove(file_path) == 0) {
             printf("File deleted\n");
@@ -289,7 +284,7 @@ void delete_file(char *file) {
 
         // Delete file from other connected devices
         for(i = 0; i < MAXDEVICES; i++ ) {
-            if(pClientEntry->devices[i] != -1 && pClientEntry->devices[i] != sock) {
+            if(pClientEntry->devices[i] != INVALIDSOCKET && pClientEntry->devices[i] != sock) {
                 sprintf(method, "DELETE %s", file);
                 write(pClientEntry->devices_server[i], method, sizeof(method));
             }
@@ -309,13 +304,11 @@ void list_files() {
 
     pthread_mutex_lock(&pClientEntry->mutex);
 
-    // List files
+    // Calculate number of files and send to client
     for (i = 0; i < MAXFILES; i++) {
         if (pClientEntry->file_info[i].size != FREE_FILE_SIZE)
             nList += strlen(pClientEntry->file_info[i].name) + 1;
     }
-
-    // Send length
     nListConverted = htonl(nList);
     write(sock, &nListConverted, sizeof(nListConverted));
 
@@ -336,7 +329,7 @@ void free_device() {
 
     pthread_mutex_lock(&pClientEntry->mutex);
 
-    for (client_node = TAILQ_FIRST(&my_tailq_head); client_node != NULL; client_node = tmp_client_node) {
+    for (client_node = TAILQ_FIRST(&clients_tailq_head); client_node != NULL; client_node = tmp_client_node) {
         if (strcmp(client_node->client_entry.userid, username) == 0) {
             // Set current sock device free
             if (client_node->client_entry.devices[0] == sock) {
@@ -364,22 +357,21 @@ void free_device() {
 void *connection_handler(void *socket_desc) {
     // Get the socket descriptor
     sock = *(int *) socket_desc;
-    struct sockaddr_in addr;
     int read_size, i, n, device_to_use;
-    char file_path[256], client_ip[20], client_message[METHODSIZE];
     uint16_t client_server_port;
-    struct tailq_entry *client_node, *tmp_client_node;
     int *nullReturn = NULL;
+    char file_path[256], client_ip[20], client_message[METHODSIZE];
+    struct sockaddr_in addr;
+    struct tailq_entry *client_node, *tmp_client_node;
     struct dirent **namelist;
     struct stat st;
-
 
     // Get socket addr and client IP
     socklen_t addr_size = sizeof(struct sockaddr_in);
     getpeername(sock, (struct sockaddr *)&addr, &addr_size);
     strcpy(client_ip, inet_ntoa(addr.sin_addr));
 
-    // Receive username from client
+    // Receive username
     read_size = recv(sock, username, sizeof(username), 0);
     username[read_size] = '\0';
 
@@ -392,7 +384,7 @@ void *connection_handler(void *socket_desc) {
     pthread_mutex_lock(&clientCreationLock);
 
     // Search for client in client list
-    for (client_node = TAILQ_FIRST(&my_tailq_head); client_node != NULL; client_node = tmp_client_node) {
+    for (client_node = TAILQ_FIRST(&clients_tailq_head); client_node != NULL; client_node = tmp_client_node) {
         if (strcmp(client_node->client_entry.userid, username) == 0) {
             break;
         }
@@ -452,7 +444,7 @@ void *connection_handler(void *socket_desc) {
     }*/
         free(namelist);
 
-        TAILQ_INSERT_TAIL(&my_tailq_head, client_node, entries);
+        TAILQ_INSERT_TAIL(&clients_tailq_head, client_node, entries);
     }
     pClientEntry = &(client_node->client_entry);
 

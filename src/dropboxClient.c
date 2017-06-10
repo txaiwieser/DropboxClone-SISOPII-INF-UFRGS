@@ -20,33 +20,25 @@
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxClient.h"
 
-// REVIEW do these variables need to be global?
-char server_host[256];
+char server_host[256], server_user[MAXNAME], user_sync_dir_path[256];
 int server_port = 0, sock = 0;
-char server_user[MAXNAME];
-char user_sync_dir_path[256];
 char *pIgnoredFileEntry; // Pointer to list of ignored files. It's used by inotify to prevent uploading a file that has just best downloaded.
-
-#define EVENT_SIZE  ( sizeof (struct inotify_event) )
-#define BUF_LEN ( 1024 * ( EVENT_SIZE + 16 ) )
 
 pthread_mutex_t fileOperationMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t inotifyMutex = PTHREAD_MUTEX_INITIALIZER;
 
-TAILQ_HEAD(, tailq_entry) my_tailq_head;
+TAILQ_HEAD(, tailq_entry) ignoredfiles_tailq_head;
 
 // TODO Handle errors on send_file, get_file, receive_file (on server), send_file (on server). If file can't be opened, it should return an error and exit. Also, display success messages.
 void send_file(char *file) {
-    char method[METHODSIZE];
     struct stat st;
-    char buffer[1024] = {0};
+    char buffer[1024] = {0}, method[METHODSIZE];
     int valread;
     int32_t length_converted;
 
     pthread_mutex_lock(&fileOperationMutex);
 
-    if (stat(file, &st) == 0 && S_ISREG(st.st_mode)) { // If file exists
-        /* Open the file that we wish to transfer */
+    if (file_exists(file)) {
         FILE *fp = fopen(file,"rb");
         if (fp == NULL) {
             printf("Couldn't open the file\n");
@@ -54,32 +46,32 @@ void send_file(char *file) {
             // Concatenate strings to get method = "UPLOAD filename"
             sprintf(method, "UPLOAD %s", basename(file));
 
-            // Call to the server
+            // Call the server
             write(sock, method, sizeof(method));
             debug_printf("[%s method sent]\n", method);
 
-            // Send file modtime
+            // Send file modification time
             write(sock, &st.st_mtime, sizeof(st.st_mtime)); // TODO use htonl and ntohl?
 
             // Detect if file was created and local version is newer than server version, so file must be transfered
             valread = read(sock, buffer, sizeof(buffer));
             if (valread > 0) {
-                /* Send file size to server */
+                // Send file size to server
                 length_converted = htonl(st.st_size);
                 write(sock, &length_converted, sizeof(length_converted));
 
-                /* Read data from file and send it */
+                // Read data from file and send it
                 while (1) {
-                    /* First read file in chunks of 1024 bytes */
+                    // First read file in chunks of 1024 bytes
                     unsigned char buff[1024] = {0};
                     int nread = fread(buff, 1, sizeof(buff), fp);
 
-                    /* If read was success, send data. */
+                    // If read was success, send data.
                     if (nread > 0) {
                         write(sock, buff, nread);
                     }
 
-                    /* Either there was error, or reached end of file */
+                    // Either there was error, or reached end of file
                     if (nread < sizeof(buff)) {
                         /*if (feof(fp))
                             debug_printf("End of file\n"); */
@@ -102,10 +94,8 @@ void send_file(char *file) {
 void get_file(char *file, char *path) {
     int valread;
     int32_t nLeft;
-    char buffer[1024] = {0};
-    char method[METHODSIZE];
-    char file_path[256];
     time_t original_file_time;
+    char buffer[1024] = {0}, method[METHODSIZE], file_path[256];
     struct utimbuf new_times;
     struct tailq_entry *ignoredfile_node;
 
@@ -126,17 +116,17 @@ void get_file(char *file, char *path) {
 
         // TODO If file doesn't exist on server, return an error message.
 
-        /* Create file where data will be stored */
+        // Create file where data will be stored
         FILE *fp;
         fp = fopen(file_path, "wb");
         if (NULL == fp) {
             printf("Error opening file");
         } else {
-            // Receive length
+            // Receive file size
             valread = read(sock, &nLeft, sizeof(nLeft));
             nLeft = ntohl(nLeft);
 
-            /* Receive data in chunks */
+            // Receive data in chunks
             while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
                 fwrite(buffer, 1, valread, fp);
                 nLeft -= valread;
@@ -150,8 +140,8 @@ void get_file(char *file, char *path) {
 
         // Set modtime to original file modtime
         valread = read(sock, &original_file_time, sizeof(time_t));
-        new_times.modtime = original_file_time; /* set mtime to original file time */
-        new_times.actime = time(NULL); /* set atime to current time */
+        new_times.modtime = original_file_time; // set mtime to original file time
+        new_times.actime = time(NULL); // set atime to current time
         utime(file_path, &new_times);
 
         // If path is user_sync_dir, insert filename in the list of ignored files
@@ -161,8 +151,8 @@ void get_file(char *file, char *path) {
             if (ignoredfile_node == NULL) {
                 perror("malloc failed");
             }
-            TAILQ_INSERT_TAIL(&my_tailq_head, ignoredfile_node, entries);
-            debug_printf("[Inseriu arquivo %s na lista pois foi baixado]\n", file);
+            TAILQ_INSERT_TAIL(&ignoredfiles_tailq_head, ignoredfile_node, entries);
+            debug_printf("[Added %s to list of ignored files because it has just been downloaded.]\n", file);
         }
         pthread_mutex_unlock(&inotifyMutex);
     } else {
@@ -199,7 +189,7 @@ void delete_local_file(char *file) {
         if (ignoredfile_node == NULL) {
             perror("malloc failed");
         }
-        TAILQ_INSERT_TAIL(&my_tailq_head, ignoredfile_node, entries);
+        TAILQ_INSERT_TAIL(&ignoredfiles_tailq_head, ignoredfile_node, entries);
         debug_printf("[Inseriu arquivo %s na lista pois foi apagado primeiramente em outro dispositivo]\n", file);
     };
 
@@ -261,7 +251,7 @@ void cmdList() {
     read(sock, &nLeft, sizeof(nLeft));
     nLeft = ntohl(nLeft);
 
-    /* Receive data in chunks */
+    // Receive data in chunks
     while (nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0) {
         buffer[valread] = '\0';
         printf("%s", buffer);
@@ -272,6 +262,7 @@ void cmdList() {
 void cmdGetSyncDir() {
     // Create user sync_dir if it doesn't exist
     makedir_if_not_exists(user_sync_dir_path);
+    // TODO sync_dir here! Mutex?
 };
 
 void cmdMan() {
@@ -351,9 +342,7 @@ void sync_client() {
 }
 
 void* sync_daemon(void* unused) {
-    int length;
-    int fd;
-    int wd;
+    int length, fd, wd;
     char buffer[BUF_LEN];
     struct tailq_entry *ignoredfile_node;
     struct tailq_entry *tmp_ignoredfile_node;
@@ -366,8 +355,6 @@ void* sync_daemon(void* unused) {
 
     wd = inotify_add_watch( fd, user_sync_dir_path,
                             IN_CLOSE_WRITE | IN_MOVE | IN_DELETE );
-
-    // TODO testar renomeação
 
     while (1) {
         int i = 0;
@@ -386,7 +373,7 @@ void* sync_daemon(void* unused) {
                     pthread_mutex_lock(&inotifyMutex); // prevent inotify of getting file before it's inserted in ignored file list
 
                     // Search for file in list of ignored files
-                    for (ignoredfile_node = TAILQ_FIRST(&my_tailq_head); ignoredfile_node != NULL; ignoredfile_node = tmp_ignoredfile_node) {
+                    for (ignoredfile_node = TAILQ_FIRST(&ignoredfiles_tailq_head); ignoredfile_node != NULL; ignoredfile_node = tmp_ignoredfile_node) {
                         if (strcmp(ignoredfile_node->filename, event->name) == 0) {
                             debug_printf("[Daemon: Found file %s in ignored files list]\n", event->name);
                             break;
@@ -412,7 +399,7 @@ void* sync_daemon(void* unused) {
                         }
                     } else {
                         // Remove file from list
-                        TAILQ_REMOVE(&my_tailq_head, ignoredfile_node, entries);
+                        TAILQ_REMOVE(&ignoredfiles_tailq_head, ignoredfile_node, entries);
                         // Free the item as we don’t need it anymore.
                         free(ignoredfile_node);
                     }
@@ -424,16 +411,14 @@ void* sync_daemon(void* unused) {
     ( void ) inotify_rm_watch( fd, wd );
     ( void ) close( fd );
 
-    exit( 0 ); // REVIEW correto? fecha todsa threads?
+    exit( 0 ); // REVIEW is it correct? close all the threads?
 }
 
-// This thread receives requests from server
+// A local server, to handle requests from server
 void* local_server(void* unused) {
-    int server_fd, new_socket;
+    int server_fd, new_socket, read_size, addrlen;
     struct sockaddr_in address;
-    int addrlen = sizeof(address);
     uint16_t port_converted;
-    int read_size;
     char server_message[METHODSIZE];
 
     // Creating socket file descriptor
@@ -506,7 +491,7 @@ int main(int argc, char * argv[]) {
     int valread;
     pthread_t thread_id;
 
-    // Check number of parameteres
+    // Check number of parameters
     if (argc < 4) {
         printf("Usage: %s <user> <IP> <port>\n", argv[0]);
         return 1;
@@ -523,7 +508,7 @@ int main(int argc, char * argv[]) {
     }
 
     // Initialize the tail queue
-    TAILQ_INIT(&my_tailq_head);
+    TAILQ_INIT(&ignoredfiles_tailq_head);
 
     // Define path to user sync_dir folder
     sprintf(user_sync_dir_path, "%s/sync_dir_%s", getenv("HOME"), server_user);
