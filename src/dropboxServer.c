@@ -240,8 +240,6 @@ void receive_file(char *file) {
         fclose (fp);
       }
     }
-
-    // REVIEW tem que checar timestamp dos arquivos nos outros dispositivos antes de enviar pra eles? achoq nao, mas tem que confirmar isso e testar bem
 };
 
 void send_file(char * file) {
