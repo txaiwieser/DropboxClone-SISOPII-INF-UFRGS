@@ -297,16 +297,15 @@ void cmdExit() {
 }
 
 void sync_client() {
+    pthread_mutex_lock(&fileOperationMutex);
+    debug_printf("[Syncing...]\n");
+
+    /* TODO Sync modifications since last logout
+
     FILE *fp;
     struct stat st;
     char filepath[MAXNAME], filename[MAXNAME], buf[256];
     sprintf(filepath, "%s/.dropboxfiles", user_sync_dir_path);
-
-    pthread_mutex_lock(&fileOperationMutex);
-
-    debug_printf("[Syncing...]\n");
-
-    /* TODO Sync modifications since last logout
 
     // Open .dropboxfiles if it exists
     if (stat(filepath, &st) == 0) {
@@ -333,7 +332,6 @@ void sync_client() {
         }
         fclose(fp);
 
-        /*
         If a file listed on .dropboxfiles doesn't exist anymore,
         user deleted it. So, delete it on server and other devices too.
         delete_server_file("filename");
@@ -346,15 +344,14 @@ void sync_client() {
         last sync. So, upload it to the server.
         send_file("filename");
 
-        TODO If a file is listed on .dropboxfiles, exists locally and on server,
+        If a file is listed on .dropboxfiles, exists locally and on server,
         need to check what's the newer version, and update it on client or server.
         if (localversion newer) send_file("filename");
         else if (remoteversion newer) get_file("filename");
 
-        // REVIEW any other case?
+        Any other case...?
+    }*/
 
-        */
-    }
     debug_printf("[Syncing done]\n");
     pthread_mutex_unlock(&fileOperationMutex);
 }
