@@ -49,11 +49,27 @@ O projeto foi desenvolvido utilizando um ambiente com as seguintes caracteristic
 \section{Descrições e justificativas}
 
 \subsection{Funcionamento}
-(threads, metodos do ‘protocolo de aplicação’)
+
+A aplicação do cliente possui 3 threads, a primeira é o 'shell', que fica espera comandos através da CLI.
+A segunda thread fica aguardando notificações do sistema de arquivos, através da biblioteca 'inotify', pra monitorar as modificações de arquivos no diretório 'sync\_dir' do usuário. Quando o arquivo é criado ou renomeado, faz o upload pro servidor. E quando o arquivo é deletado, envia um comando de DELETE pro servidor.
+A terceira thread é a local\_server, que fica ouvindo chamadas de PUSH e DELETE do servidor.
+
+O servidor possui uma thread principal que é responsável por lidar com as requisições de conexões dos clientes. Para cada cliente (por dispositivo) que realiza a conexão é criada uma thread. Essa thread fica aguardando as requisições do cliente. Quando um arquivo é recebido pelos servidor ele propaga as alterações pros outros dispositivos conectados, enviando mensagens de PUSH e DELETE.
+
+Foi implementado no client uma lista de arquivos ignorados. Essa lista mantém os arquivos que devem ser ignorados na próxima vez que o 'inotify' perceber que eles foram alterados. Os arquivos são incluídos nessa lista quando o cliente recebe um PUSH do servidor e faz download de um arquivo, e quando recebe um DELETE do servidor e o deleta. Assim, quando o 'inofity' é executado e recebe a informação esses arquivos  foram modificados/removidos, podemos ignorar e evitar mandar um UPLOAD/DELETE para o servidor. Após essa detecção é feita a remoção do arquivo da lista.
 
 \subsection{Concorrência no servidor}
 
 \subsection{Sincronização}
+
+No cliente utilizamos dois mutex, o 'fileOperationMutex' serve para garantir que somente uma operação de arquivo seja feita por vez, e o 'inotifyMutex' serve para garantir que o 'inotify' não seja ativado antes que um arquivo seja 'incluído' na lista de arquivos ignorados.
+
+Já no servidor, utilizamos somente um mutex (armazenado na struct do usuário) para garantir que algumas coisas, como por exemplo a conexão inicial no servidor, sejam executadas em somente um dispositivo por vez.
+
+Além de proteção de seções críticas, implementamos algumas barreiras, para realizar a sincronização de tarefas do cliente.
+
+Temos duas barreiras no cliente, a primeira é a 'syncbarrier', garante que o 'shell' do dropbox só apareça depois que for feita uma conexão com sucesso ao servidor. Assim, a thread principal de interação com o usuário fica travada até a conexão, mostrando uma mensagem de sincronia "syncing..." até que a sincronização tenha sido completada.
+A segunda barreira no cliente é a 'localserverbarrier', que garante que a sincronização inicial de arquivos só será feito após o local\_server estar disponível para aceitar conexões.
 
 \subsection{Comunicação}
 
@@ -100,6 +116,10 @@ O projeto foi desenvolvido utilizando um ambiente com as seguintes caracteristic
 	\item void delete\_server\_file(char *file)
 	\newline Remove o arquivo file para do servidor. 'file' – filename.ext
 \end{itemize}
+
+\subsubsection{SIGNAL}
+Ao terminar o processo do servidor (usando CTRL+C, por exemplo), recebemos a notificação do signal enviado (SIGINT) e então realizamos a saída de modo 'gracefully'. Isso faz com que a conexão seja fechada na hora, e assim o cliente percebe e encerra também, com uma mensagem de erro "servidor desconectou, saindo...".
+
 \subsection{Testes}
 
 \section{Dificuldades encontradas}
