@@ -176,7 +176,7 @@ void receive_file(char *file) {
     // If file already exists and server's version is newer, it's not transfered.
     if((file_found >= 0) && (client_file_time < pClientEntry->file_info[file_found].last_modified)) {
         printf("Client file is older than server version\n");
-        write(sock, "ERROR", 5);
+        write(sock, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
         pthread_mutex_unlock(&pClientEntry->mutex);
         // Send server file to client
         for(i = 0; i < MAXDEVICES; i++ ) {
@@ -192,15 +192,16 @@ void receive_file(char *file) {
         fp = fopen(file_path, "wb");
         if (NULL == fp) {
             printf("Error opening file");
-            write(sock, "ERROR", 5);
+            write(sock, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
             pthread_mutex_unlock(&pClientEntry->mutex);
         } else {
             // Send "OK" to confirm file was created and is newer than the server version, so it should be transfered
-            write(sock, "OK", 2);
+            write(sock, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
 
             // Receive file size
             valread = read(sock, &file_size, sizeof(file_size));
             nLeft = ntohl(file_size);
+            printf("sync_server: file_size=%ud nLeft_converted=%ud\n", file_size, nLeft);
 
             // Receive data in chunks
             while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
@@ -255,13 +256,14 @@ void send_file(char * file) {
         FILE *fp = fopen(file_path,"rb");
         if (fp == NULL) {
             printf("File open error");
-            write(sock, "ERROR", 5);
+            write(sock, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
         } else {
             // Send "OK" exists and was opened
-            write(sock, "OK", 2);
+            write(sock, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
 
             // Send file size to client
             length_converted = htonl(st.st_size);
+            printf("send_file length=%ld length_converted=%ud\n", st.st_size, length_converted);
             write(sock, &length_converted, sizeof(length_converted));
 
             // Read data from file and send it
@@ -292,7 +294,7 @@ void send_file(char * file) {
         write(sock, &st.st_mtime, sizeof(st.st_mtime));
     } else {
         printf("File doesn't exist!\n");
-        write(sock, "ERROR", 5);
+        write(sock, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
     }
     pthread_mutex_unlock(&pClientEntry->mutex);
 }
@@ -496,7 +498,7 @@ void *connection_handler(void *socket_desc) {
     pthread_mutex_unlock(&clientCreationLock);
 
     // Send "OK" to confirm connection was accepted.
-    write(sock, "OK", 2);
+    write(sock, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
 
     // Receive client's local server port
     read_size = recv(sock, &client_server_port, sizeof(client_server_port), 0);

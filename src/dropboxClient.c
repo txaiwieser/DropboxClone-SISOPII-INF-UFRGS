@@ -60,10 +60,11 @@ void send_file(char *file) {
             write(sock, &st.st_mtime, sizeof(st.st_mtime));
 
             // Detect if file was created and local version is newer than server version, so file must be transfered
-            valread = read(sock, buffer, sizeof(buffer));
-            if (strcmp(buffer, "OK") == 0) {
+            valread = read(sock, buffer, TRANSMISSION_MSG_SIZE);
+            if (strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) == 0) {
                 // Send file size to server
                 length_converted = htonl(st.st_size);
+                printf("send_file %s length=%ld length_converted=%ud\n", basename(file), st.st_size, length_converted);
                 write(sock, &length_converted, sizeof(length_converted));
 
                 // Read data from file and send it
@@ -125,8 +126,8 @@ void get_file(char *file, char *path) {
         debug_printf("[%s method sent]\n", method);
 
         // Detect if server accepted transmission
-        valread = read(sock, buffer, sizeof(buffer));
-        if (strcmp(buffer, "OK") == 0) {
+        valread = read(sock, buffer, TRANSMISSION_MSG_SIZE);
+        if (strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) == 0) {
           // Create file where data will be stored
           FILE *fp;
           fp = fopen(file_path, "wb");
@@ -137,6 +138,7 @@ void get_file(char *file, char *path) {
               // Receive file size
               valread = read(sock, &nLeft, sizeof(nLeft));
               nLeft = ntohl(nLeft);
+              printf("get_file %s nLeft_converted=%ud\n", file, nLeft);
               printf("get_file: 2\n");
               printf("get_file: 2.1 -> %d\n", nLeft);
               // Receive data in chunks
@@ -267,7 +269,7 @@ void cmdList() {
     uint32_t nLeft;
     char buffer[1024] = {0};
 
-    send(sock, "LIST", 4, 0);
+    write(sock, "LIST", METHODSIZE);
 
     // Receive length
     read(sock, &nLeft, sizeof(nLeft));
@@ -309,7 +311,7 @@ void sync_client() {
     pthread_mutex_lock(&fileOperationMutex);
     debug_printf("[Syncing...]\n");
 
-    send(sock, "SYNC", 4, 0);
+    write(sock, "SYNC", METHODSIZE);
 
     // Receive number of files
     read(sock, &sync_files_left, sizeof(sync_files_left));

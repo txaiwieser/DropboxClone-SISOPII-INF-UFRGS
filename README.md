@@ -4,7 +4,6 @@
 3. Inicie o cliente: ```./bin/dropboxClient usuario 127.0.0.1 3003```
 
 ## Alta prioridade
-- [ ] Às vezes o get_file recebe o tamanho do arquivo errado, e aí fica num loop infinito. (Talvez isso aconteça com outras funções como send_file também, pois a troca de mensagens é similar). Tem uma possivel solucao em outro branch (mas ta dando um outro bug...) -> Possibilidade de arrumar: enviar usando strings, de tamanho fixo. Testar: colocar sleep antes e depois de enviar o tamanho do arquivo resolve?
 - [ ] Os arquivos devem ser sincronizados toda vez que o cliente conecta ou não? Seria uma boa pelo menos baixar os do servidor que estão com timestamp diferente...
 
 ## Baixa prioridade

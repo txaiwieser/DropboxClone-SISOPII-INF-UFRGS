@@ -4,6 +4,10 @@
 #define METHODSIZE 255 // Method messages (DOWNLOAD filename, UPLOAD filename, PUSH filename, etc) length
 #define INVALIDSOCKET -1
 
+// Both constants must have TRANSMISSION_MSG_SIZE characteres!
+#define TRANSMISSION_CONFIRM "OK"
+#define TRANSMISSION_CANCEL "ER"
+#define TRANSMISSION_MSG_SIZE 2
 
 #define MIN(a,b) (a < b)? a : b
 
