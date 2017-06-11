@@ -1,6 +1,5 @@
 #include "dropboxUtil.h"
 
-#define MAXFILES 200 // Maximum number of files in user dir
 #define MAXDEVICES 2 // Maximum number of connected devices for each user
 
 #define FREE_FILE_SIZE -1

@@ -5,26 +5,29 @@
 #include <stdlib.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/queue.h>
 #define __USE_XOPEN
-#include <time.h>
 #include <utime.h>
 #include <unistd.h>
 #include <netdb.h>
 #include <libgen.h>
 #include <pthread.h>
 #include <math.h>
+#include <stdlib.h>
 #include <dirent.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxClient.h"
 
 char server_host[256], server_user[MAXNAME], user_sync_dir_path[256];
 int server_port = 0, sock = 0;
+uint16_t sync_files_left = MAXFILES; // number of files yet to sync
 char *pIgnoredFileEntry; // Pointer to list of ignored files. It's used by inotify to prevent uploading a file that has just best downloaded.
 
 pthread_barrier_t syncbarrier;
+pthread_barrier_t localserverbarrier;
 
 pthread_mutex_t fileOperationMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t inotifyMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -35,9 +38,11 @@ void send_file(char *file) {
     struct stat st;
     char buffer[1024] = {0}, method[METHODSIZE];
     int valread;
-    int32_t length_converted;
+    uint32_t length_converted;
 
+    printf("send_file:antes fileOperationMutex lock\n");
     pthread_mutex_lock(&fileOperationMutex);
+    printf("send_file:depois fileOperationMutex lock\n");
 
     if (stat(file, &st) == 0 && S_ISREG(st.st_mode)) { // If file exists
         FILE *fp = fopen(file,"rb");
@@ -52,13 +57,14 @@ void send_file(char *file) {
             debug_printf("[%s method sent]\n", method);
 
             // Send file modification time
-            write(sock, &st.st_mtime, sizeof(st.st_mtime)); // TODO use htonl and ntohl?
+            write(sock, &st.st_mtime, sizeof(st.st_mtime));
 
             // Detect if file was created and local version is newer than server version, so file must be transfered
-            valread = read(sock, buffer, sizeof(buffer));
-            if (strcmp(buffer, "OK") == 0) {
+            valread = read(sock, buffer, TRANSMISSION_MSG_SIZE);
+            if (strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) == 0) {
                 // Send file size to server
                 length_converted = htonl(st.st_size);
+                printf("send_file %s length=%ld length_converted=%ud\n", basename(file), st.st_size, length_converted);
                 write(sock, &length_converted, sizeof(length_converted));
 
                 // Read data from file and send it
@@ -89,18 +95,22 @@ void send_file(char *file) {
         printf("File doesn't exist! Pass a valid filename.\n");
     }
 
+    printf("send_file:antes fileOperationMutex unlock\n");
     pthread_mutex_unlock(&fileOperationMutex);
+    printf("send_file:depois fileOperationMutex unlock\n");
 }
 
 void get_file(char *file, char *path) {
     int valread;
-    int32_t nLeft;
+    uint32_t nLeft;
     time_t original_file_time;
     char buffer[1024] = {0}, method[METHODSIZE], file_path[256];
     struct utimbuf new_times;
     struct tailq_entry *ignoredfile_node;
 
+    printf("get_file:antes fileOperationMutex lock\n");
     pthread_mutex_lock(&fileOperationMutex);
+    printf("get_file:depois fileOperationMutex lock\n");
 
     // If current directory is user_sync_dir, overwrite the file. It's another directory, get file only if there's no file with same filename
     if(!file_exists(file) || strcmp(user_sync_dir_path, path) == 0) {
@@ -115,50 +125,64 @@ void get_file(char *file, char *path) {
         write(sock, method, sizeof(method));
         debug_printf("[%s method sent]\n", method);
 
-        // Create file where data will be stored
-        FILE *fp;
-        fp = fopen(file_path, "wb");
-        if (NULL == fp) {
-            printf("Error opening file");
+        // Detect if server accepted transmission
+        valread = read(sock, buffer, TRANSMISSION_MSG_SIZE);
+        if (strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) == 0) {
+          // Create file where data will be stored
+          FILE *fp;
+          fp = fopen(file_path, "wb");
+          if (NULL == fp) {
+              printf("Error opening file");
+          } else {
+              printf("get_file: 1\n");
+              // Receive file size
+              valread = read(sock, &nLeft, sizeof(nLeft));
+              nLeft = ntohl(nLeft);
+              printf("get_file %s nLeft_converted=%ud\n", file, nLeft);
+              printf("get_file: 2\n");
+              printf("get_file: 2.1 -> %d\n", nLeft);
+              // Receive data in chunks
+              while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
+                  fwrite(buffer, 1, valread, fp);
+                  nLeft -= valread;
+                  //printf("get_file: 3 nLeft=%d\n", nLeft);
+              }
+              printf("get_file: 4\n");
+              if (valread < 0) {
+                  printf("\n Read Error \n");
+              }
+          }
+          printf("get_file: antes lock inotify\n");
+          pthread_mutex_lock(&inotifyMutex); // prevent inotify of getting file before it's inserted in ignored file list
+          printf("get_file: depois lock inotify\n");
+          fclose (fp);
+
+          // Set modtime to original file modtime
+          valread = read(sock, &original_file_time, sizeof(time_t));
+          new_times.modtime = original_file_time; // set mtime to original file time
+          new_times.actime = time(NULL); // set atime to current time
+          utime(file_path, &new_times);
+
+          // If path is user_sync_dir, insert filename in the list of ignored files
+          if(strcmp(user_sync_dir_path, path) == 0) {
+              ignoredfile_node = malloc(sizeof(*ignoredfile_node));
+              strcpy(ignoredfile_node->filename, file);
+              if (ignoredfile_node == NULL) {
+                  perror("malloc failed");
+              }
+              TAILQ_INSERT_TAIL(&ignoredfiles_tailq_head, ignoredfile_node, entries);
+              debug_printf("[Added %s to list of ignored files because it has just been downloaded.]\n", file);
+          }
+          pthread_mutex_unlock(&inotifyMutex);
         } else {
-            // Receive file size
-            valread = read(sock, &nLeft, sizeof(nLeft));
-            nLeft = ntohl(nLeft);
-
-            // Receive data in chunks
-            while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
-                fwrite(buffer, 1, valread, fp);
-                nLeft -= valread;
-            }
-            if (valread < 0) {
-                printf("\n Read Error \n");
-            }
+          printf("Invalid filename\n");
         }
-        pthread_mutex_lock(&inotifyMutex); // prevent inotify of getting file before it's inserted in ignored file list
-        fclose (fp);
-
-        // Set modtime to original file modtime
-        valread = read(sock, &original_file_time, sizeof(time_t));
-        new_times.modtime = original_file_time; // set mtime to original file time
-        new_times.actime = time(NULL); // set atime to current time
-        utime(file_path, &new_times);
-
-        // If path is user_sync_dir, insert filename in the list of ignored files
-        if(strcmp(user_sync_dir_path, path) == 0) {
-            ignoredfile_node = malloc(sizeof(*ignoredfile_node));
-            strcpy(ignoredfile_node->filename, file);
-            if (ignoredfile_node == NULL) {
-                perror("malloc failed");
-            }
-            TAILQ_INSERT_TAIL(&ignoredfiles_tailq_head, ignoredfile_node, entries);
-            debug_printf("[Added %s to list of ignored files because it has just been downloaded.]\n", file);
-        }
-        pthread_mutex_unlock(&inotifyMutex);
     } else {
         printf("There's already a file named %s in this directory\n", file);
     }
-
+    printf("get_file:antes fileOperationMutex unlock\n");
     pthread_mutex_unlock(&fileOperationMutex);
+    printf("get_file:depois fileOperationMutex unlock\n");
 };
 
 void delete_server_file(char *file) {
@@ -178,6 +202,7 @@ void delete_local_file(char *file) {
     sprintf(filepath, "%s/%s", user_sync_dir_path, file);
 
     pthread_mutex_lock(&fileOperationMutex);
+    pthread_mutex_lock(&inotifyMutex); // prevent inotify of deleting file before it's inserted in ignored file list
 
     if(remove(filepath) == 0) {
         // Add to ignore list, so inotify doesn't send a DELETE method again to server
@@ -190,7 +215,9 @@ void delete_local_file(char *file) {
         debug_printf("[Inseriu arquivo %s na lista pois foi apagado primeiramente em outro dispositivo]\n", file);
     };
 
+    pthread_mutex_unlock(&inotifyMutex);
     pthread_mutex_unlock(&fileOperationMutex);
+
 };
 
 // Save list of files into user_sync_dir_path/.dropboxfiles
@@ -239,10 +266,10 @@ void save_list_of_files() {
 
 void cmdList() {
     int valread;
-    int32_t nLeft;
+    uint32_t nLeft;
     char buffer[1024] = {0};
 
-    send(sock, "LIST", 4, 0);
+    write(sock, "LIST", METHODSIZE);
 
     // Receive length
     read(sock, &nLeft, sizeof(nLeft));
@@ -257,10 +284,11 @@ void cmdList() {
 };
 
 void cmdGetSyncDir() {
-    // Create user sync_dir if it doesn't exist
-    makedir_if_not_exists(user_sync_dir_path);
-    // TODO remover sync_client();
-    // TODO sync_dir here! Mutex?
+    // Create user sync_dir if it doesn't exist and then sync files
+    if(makedir_if_not_exists(user_sync_dir_path) == 0){
+        sync_client();
+        pthread_barrier_wait(&syncbarrier); // wait for syncing all files
+    }
 };
 
 void cmdMan() {
@@ -280,17 +308,14 @@ void cmdExit() {
 }
 
 void sync_client() {
-    int32_t nLeft;
-
     pthread_mutex_lock(&fileOperationMutex);
     debug_printf("[Syncing...]\n");
 
-    send(sock, "SYNC", 4, 0);
+    write(sock, "SYNC", METHODSIZE);
 
     // Receive number of files
-    read(sock, &nLeft, sizeof(nLeft));
-    nLeft = ntohl(nLeft);
-    printf("passou\n");
+    read(sock, &sync_files_left, sizeof(sync_files_left));
+    sync_files_left = ntohs(sync_files_left);
 
     /* TODO Sync modifications since last logout
 
@@ -388,25 +413,26 @@ void* sync_daemon(void* unused) {
                         tmp_ignoredfile_node = TAILQ_NEXT(ignoredfile_node, entries);
                     }
 
-                    pthread_mutex_unlock(&inotifyMutex);
-
-                    // If it's not in the list, it was modified locally, so changes need to be propagated to server
-                    if(ignoredfile_node == NULL) {
+                    // If it's in the list, remove it
+                    if(ignoredfile_node != NULL) {
+                        TAILQ_REMOVE(&ignoredfiles_tailq_head, ignoredfile_node, entries);
+                        pthread_mutex_unlock(&inotifyMutex);
+                    } else {
+                        // It's not in the list, so it was modified locally and changes need to be propagated to server
+                        pthread_mutex_unlock(&inotifyMutex);
                         if ( (event->mask & IN_CLOSE_WRITE) || (event->mask & IN_MOVED_TO)  ) {
-                            debug_printf( "The file %s was created, modified, or moved from somewhere.\n", event->name );
+                            debug_printf( "[Daemon: The file %s was created, modified, or moved from somewhere.]\n", event->name );
                             sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
+                            usleep(200); // prevent inotify of getting file before it's metadata is saved by file manager
                             send_file(filepath);
                         } else if ( event->mask & IN_DELETE  ) {
-                            debug_printf( "The file %s was deleted.\n", event->name );
+                            debug_printf( "[Daemon: The file %s was deleted.]\n", event->name );
                             delete_server_file(event->name);
                         } else if ( event->mask & IN_MOVED_FROM  ) {
-                            debug_printf( "The file %s was renamed.\n", event->name );
+                            debug_printf( "[Daemon: The file %s was renamed.]\n", event->name );
                             sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
                             delete_server_file(event->name);
                         }
-                    } else {
-                        // Remove file from list
-                        TAILQ_REMOVE(&ignoredfiles_tailq_head, ignoredfile_node, entries);
                     }
                 }
             }
@@ -460,7 +486,7 @@ void* local_server(void* unused) {
     addrlen = sizeof(struct sockaddr_in);
     while ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen))) {
 
-        pthread_barrier_wait(&syncbarrier);
+        pthread_barrier_wait(&localserverbarrier);
 
         // Receive a message from server
         while ((read_size = recv(new_socket, server_message, METHODSIZE, 0)) > 0 ) {
@@ -470,6 +496,11 @@ void* local_server(void* unused) {
             if (!strncmp(server_message, "PUSH", 4)) {
                 debug_printf("[received PUSH from server]\n");
                 get_file(server_message + 5, user_sync_dir_path);
+                if (sync_files_left > 1){
+                    sync_files_left--;
+                } else {
+                    pthread_barrier_wait(&syncbarrier);
+                }
             } else if (!strncmp(server_message, "DELETE", 6)) {
                 debug_printf("[received DELETE from server]\n");
                 delete_local_file(server_message + 7);
@@ -488,6 +519,34 @@ void* local_server(void* unused) {
     }
 
     exit(0);
+}
+
+void copy_file(char *file1, char *file2){
+    char buffer[BUFSIZ];
+    size_t n;
+    struct stat st;
+    FILE *f1, *f2;
+    struct utimbuf new_times;
+
+    if (stat(file2, &st) == 0) {
+        printf("File already exists\n");
+    } else {
+        f1 = fopen (file1, "r");
+        f2 = fopen (file2, "wb");
+
+        if (f1 != NULL && f2 != NULL) {
+            while ((n = fread(buffer, sizeof(char), sizeof(buffer), f1)) > 0){
+                if (fwrite(buffer, sizeof(char), n, f2) != n)
+                    printf("Copy failed\n");
+            }
+            fclose (f1);
+            fclose (f2);
+        }
+
+        new_times.modtime = st.st_mtime;
+        new_times.actime = time(NULL);
+        utime(file2, &new_times);
+    }
 }
 
 int main(int argc, char * argv[]) {
@@ -521,9 +580,7 @@ int main(int argc, char * argv[]) {
     sprintf(user_sync_dir_path, "%s/sync_dir_%s", getenv("HOME"), server_user);
 
     pthread_barrier_init(&syncbarrier, NULL, 2);
-
-    // Create user sync_dir
-    cmdGetSyncDir();
+    pthread_barrier_init(&localserverbarrier, NULL, 2);
 
     // Send username to server
     write(sock, server_user, strlen(server_user));
@@ -537,22 +594,23 @@ int main(int argc, char * argv[]) {
 
     debug_printf("[Connection established]\n");
 
-    if (pthread_create(&thread_id, NULL, sync_daemon, NULL) < 0) {
-        perror("could not create inotify thread");
-        return 1;
-    }
-
+    // Create thread for local_server
     if (pthread_create(&thread_id, NULL, local_server, NULL) < 0) {
         perror("could not create local_server thread");
         return 1;
     }
 
-    // Create user sync_dir if it not exists
+    // Create user sync_dir and sync files
     printf("Syncing...");
-    // TODO barreira  para esperar par amostrar terminal
-    pthread_barrier_wait(&syncbarrier); // wait for local_server connection
-    sync_client();
+    pthread_barrier_wait(&localserverbarrier); // wait for local_server connection
+    cmdGetSyncDir();
     printf("Done.\n\n");
+
+    // Create inotify thread for monitoring file changes
+    if (pthread_create(&thread_id, NULL, sync_daemon, NULL) < 0) {
+        perror("could not create inotify thread");
+        return 1;
+    }
 
     printf("Welcome to Dropbox! - v 1.0\n");
     cmdMan();
@@ -568,8 +626,11 @@ int main(int argc, char * argv[]) {
                 break;
             } else if (strcmp(token, "upload") == 0) {
                 scanf("%s", filename);
-                // TODO Copy file to local sync_dir. (What to do if there's already a file with the same name?)
-                send_file(filename);
+                // Copy file to user sync_dir.
+                char newfilepath[MAXNAME];
+                sprintf(newfilepath, "%s/%s", user_sync_dir_path, basename(filename));
+                copy_file(filename, newfilepath);
+                // send_file(filename); Not necessary anymore because inotify gets it and upload
             } else if (strcmp(token, "download") == 0) {
                 scanf("%s", filename);
                 char cwd[256];

@@ -112,7 +112,7 @@ int main(int argc, char * argv[]) {
 void sync_server() {
     char method[METHODSIZE];
     int i, d;
-    int32_t nList = 0, nListConverted;
+    uint16_t nList = 0, nListConverted;
 
     printf("<~ %s requested SYNC\n", username);
 
@@ -121,9 +121,9 @@ void sync_server() {
     // Calculate number of files and send to client
     for (i = 0; i < MAXFILES; i++) {
         if (pClientEntry->file_info[i].size != FREE_FILE_SIZE)
-            nList += strlen(pClientEntry->file_info[i].name) + 1;
+            nList ++;
     }
-    nListConverted = htonl(nList);
+    nListConverted = htons(nList);
     write(sock, &nListConverted, sizeof(nListConverted));
 
     // Find current device
@@ -136,7 +136,7 @@ void sync_server() {
     // Send filenames
     for (i = 0; i < MAXFILES; i++) {
         if (pClientEntry->file_info[i].size != FREE_FILE_SIZE) {
-            printf("Nome do arquivo: %s\n", pClientEntry->file_info[i].name);
+            printf("[PUSH %s to %s's device %d]\n", pClientEntry->file_info[i].name, username, d);
             sprintf(method, "PUSH %s", pClientEntry->file_info[i].name);
             write(pClientEntry->devices_server[d], method, sizeof(method));
         }
@@ -147,7 +147,7 @@ void sync_server() {
 
 void receive_file(char *file) {
     int valread, file_i, file_found = -1, first_free_index = -1, i;
-    int32_t nLeft, file_size;
+    uint32_t nLeft, file_size;
     char buffer[1024] = {0}, method[METHODSIZE], file_path[256];
     time_t client_file_time;
     struct utimbuf new_times;
@@ -176,76 +176,77 @@ void receive_file(char *file) {
     // If file already exists and server's version is newer, it's not transfered.
     if((file_found >= 0) && (client_file_time < pClientEntry->file_info[file_found].last_modified)) {
         printf("Client file is older than server version\n");
-        write(sock, "ERROR", 5);
+        write(sock, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
         pthread_mutex_unlock(&pClientEntry->mutex);
         // Send server file to client
         for(i = 0; i < MAXDEVICES; i++ ) {
             if(pClientEntry->devices[i] == sock) {
+                printf("[PUSH %s to %s's device %d]\n", file, pClientEntry->userid, i);
                 sprintf(method, "PUSH %s", file);
                 write(pClientEntry->devices_server[i], method, sizeof(method));
             }
         }
-    } else{
-      /* Create file where data will be stored */
-      FILE *fp;
-      fp = fopen(file_path, "wb");
-      if (NULL == fp) {
-          printf("Error opening file");
-          write(sock, "ERROR", 5);
-          pthread_mutex_unlock(&pClientEntry->mutex);
-      } else {
-          // Send "OK" to confirm file was created and is newer than the server version, so it should be transfered
-          write(sock, "OK", 2);
-
-          // Receive file size
-          valread = read(sock, &file_size, sizeof(file_size));
-          nLeft = ntohl(file_size);
-
-          // Receive data in chunks
-          while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
-              fwrite(buffer, 1, valread, fp);
-              nLeft -= valread;
-          }
-          if (valread < 0) {
-              printf("\n Read Error \n");
-          }
-
-        new_times.modtime = client_file_time; // set mtime to original file time
-        new_times.actime = time(NULL); // set atime to current time
-        utime(file_path, &new_times);
-
-        // If file already exists on client file list, update it. Otherwise, insert it.
-        if(file_found >= 0) {
-            pClientEntry->file_info[file_found].size = file_size;
-            pClientEntry->file_info[file_found].last_modified = client_file_time;
+    } else {
+        /* Create file where data will be stored */
+        FILE *fp;
+        fp = fopen(file_path, "wb");
+        if (NULL == fp) {
+            printf("Error opening file");
+            write(sock, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
+            pthread_mutex_unlock(&pClientEntry->mutex);
         } else {
-            strcpy(pClientEntry->file_info[first_free_index].name, file);
-            pClientEntry->file_info[first_free_index].size = file_size;
-            pClientEntry->file_info[first_free_index].last_modified = client_file_time;
-        }
+            // Send "OK" to confirm file was created and is newer than the server version, so it should be transfered
+            write(sock, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
 
-        pthread_mutex_unlock(&pClientEntry->mutex);
+            // Receive file size
+            valread = read(sock, &file_size, sizeof(file_size));
+            nLeft = ntohl(file_size);
+            printf("sync_server: file_size=%ud nLeft_converted=%ud\n", file_size, nLeft);
 
-        // Send file to other connected devices
-        for(i = 0; i < MAXDEVICES; i++ ) {
-            if(pClientEntry->devices[i] != INVALIDSOCKET && pClientEntry->devices[i] != sock) {
-                sprintf(method, "PUSH %s", file);
-                write(pClientEntry->devices_server[i], method, sizeof(method));
+            // Receive data in chunks
+            while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
+                fwrite(buffer, 1, valread, fp);
+                nLeft -= valread;
+            }
+            if (valread < 0) {
+                printf("\n Read Error \n");
+            }
+
+            debug_printf("[Receive file: Closing file]\n");
+            fclose (fp);
+
+            new_times.modtime = client_file_time; // set mtime to original file time
+            new_times.actime = time(NULL); // set atime to current time
+            utime(file_path, &new_times);
+
+            // If file already exists on client file list, update it. Otherwise, insert it.
+            if(file_found >= 0) {
+                pClientEntry->file_info[file_found].size = file_size;
+                pClientEntry->file_info[file_found].last_modified = client_file_time;
+            } else {
+                strcpy(pClientEntry->file_info[first_free_index].name, file);
+                pClientEntry->file_info[first_free_index].size = file_size;
+                pClientEntry->file_info[first_free_index].last_modified = client_file_time;
+            }
+
+            pthread_mutex_unlock(&pClientEntry->mutex);
+
+            // Send file to other connected devices
+            for(i = 0; i < MAXDEVICES; i++ ) {
+                if(pClientEntry->devices[i] != INVALIDSOCKET && pClientEntry->devices[i] != sock) {
+                    printf("[PUSH %s to %s's device %d]\n", file, pClientEntry->userid, i);
+                    sprintf(method, "PUSH %s", file);
+                    write(pClientEntry->devices_server[i], method, sizeof(method));
+                }
             }
         }
-
-        debug_printf("[Receive file: Closing file]\n");
-        fclose (fp);
-      }
     }
-
-    // REVIEW tem que checar timestamp dos arquivos nos outros dispositivos antes de enviar pra eles? achoq nao, mas tem que confirmar isso e testar bem
 };
 
 void send_file(char * file) {
     char file_path[256];
     struct stat st;
-    int32_t length_converted;
+    uint32_t length_converted;
 
     sprintf(file_path, "%s/%s", user_sync_dir_path, file);
 
@@ -254,12 +255,15 @@ void send_file(char * file) {
     if (stat(file_path, &st) == 0 && S_ISREG(st.st_mode)) { // If file exists
         FILE *fp = fopen(file_path,"rb");
         if (fp == NULL) {
-            length_converted = htonl(0);
-            write(sock, &length_converted, sizeof(length_converted));
             printf("File open error");
+            write(sock, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
         } else {
+            // Send "OK" exists and was opened
+            write(sock, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
+
             // Send file size to client
             length_converted = htonl(st.st_size);
+            printf("send_file length=%ld length_converted=%ud\n", st.st_size, length_converted);
             write(sock, &length_converted, sizeof(length_converted));
 
             // Read data from file and send it
@@ -287,9 +291,10 @@ void send_file(char * file) {
         fclose(fp);
 
         // Send file modification time
-        write(sock, &st.st_mtime, sizeof(st.st_mtime)); // TODO use htonl and ntohl?
+        write(sock, &st.st_mtime, sizeof(st.st_mtime));
     } else {
         printf("File doesn't exist!\n");
+        write(sock, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
     }
     pthread_mutex_unlock(&pClientEntry->mutex);
 }
@@ -328,6 +333,7 @@ void delete_file(char *file) {
         // Delete file from other connected devices
         for(i = 0; i < MAXDEVICES; i++ ) {
             if(pClientEntry->devices[i] != INVALIDSOCKET && pClientEntry->devices[i] != sock) {
+                printf("[DELETE %s to %s's device %d]\n", file, pClientEntry->userid, i);
                 sprintf(method, "DELETE %s", file);
                 write(pClientEntry->devices_server[i], method, sizeof(method));
             }
@@ -341,7 +347,7 @@ void delete_file(char *file) {
 void list_files() {
     char filename_string[MAXNAME];
     int i;
-    int32_t nList = 0, nListConverted;
+    uint32_t nList = 0, nListConverted;
 
     printf("<~ %s requested LIST\n", username);
 
@@ -492,7 +498,7 @@ void *connection_handler(void *socket_desc) {
     pthread_mutex_unlock(&clientCreationLock);
 
     // Send "OK" to confirm connection was accepted.
-    write(sock, "OK", 2);
+    write(sock, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
 
     // Receive client's local server port
     read_size = recv(sock, &client_server_port, sizeof(client_server_port), 0);

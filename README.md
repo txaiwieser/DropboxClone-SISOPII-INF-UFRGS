@@ -4,26 +4,20 @@
 3. Inicie o cliente: ```./bin/dropboxClient usuario 127.0.0.1 3003```
 
 ## Alta prioridade
-- [ ] Data de modificação dos arquivos nem sempre tá sendo salva. (comportamento muito aleatório)
-- [ ] Sincronizar ao conectar APENAS pela primeira vez. E se a pessoa der um get_sync_dir()?
-- [ ] inotify não tá pegando todos arquivos deletados às vezes?
+- [ ] Os arquivos devem ser sincronizados toda vez que o cliente conecta ou não? Seria uma boa pelo menos baixar os do servidor que estão com timestamp diferente...
 
-## Testes
-- [ ] Apagar arquivo remoto pelo comando delete o arquivo no dispositivo atual naota sendo apagado
-- [ ] E se usuário tenta baixar um arquivo que não existe?
+## Baixa prioridade
+- [ ] Transmitir timestamps como string? É a forma mais segura aparentemente
 
 ## Revisar / Finalizar
-- [ ] Resolver TODOs
-- [ ] Testar muito bem para garantir que mutex estão corretos (movi o do inotify mas não cheguei a testar muito bem). Testar tratamento de erros. Testar interface com DEBUG=0.
-- [ ] Desativar debug da compilação final
-- warning valread
+- [ ] Testar muito bem para garantir que mutex estão corretos (movi o do inotify mas não cheguei a testar muito bem). Testar tratamento de erros. Testar interface com DEBUG=0, incluir mensagens de sucesso
+- [ ] tirar prints de debug, warnings... desativar debug na compilação final.. TODOs
 
 ## Extra
+- [ ] Deixar graceful exit 100%
 - [ ] Ao iniciar o cliente, os arquivos que foram modificados, deletados e adicionados ao sync_dir enquanto o cliente não estava online devem ser enviados ao servidor
 
-
 ### Ideias (abandonadas no momento)
-- [ ] Se a conexão com o servidor cair, o cliente poderia ser avisado
 - [ ] Ver se o retorno do write e read foi completo, sempre? Alberto disse que tem uma chance remota de isso dar problema. Em localhost deve ser muito raro.
 - [ ] Criar outro socket só p upload e download, como alberto falou na aula? nao entendi direito
 - [ ] Barra de progresso ao fazer download e upload?

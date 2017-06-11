@@ -22,14 +22,19 @@ void debug_printf(const char* message, ...) {
     }
 }
 
-// Create dir if it doesn't exist
-void makedir_if_not_exists(const char* path) {
+/* Create dir if it doesn't exist
+   Return:   0: created dir
+            -1: dir exists or there was an error when trying to create it
+ */
+int makedir_if_not_exists(const char* path) {
     struct stat st = {0};
+    int result = -1;
     pthread_mutex_lock(&fileMutex);
     if (stat(path, &st) == -1) {
-        mkdir(path, 0700);
+        result = mkdir(path, 0700);
     }
     pthread_mutex_unlock(&fileMutex);
+    return result;
 }
 
 // If file exists and is a file (not a directory)
