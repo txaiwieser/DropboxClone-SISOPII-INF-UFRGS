@@ -5,15 +5,13 @@
 
 ## Alta prioridade
 - [ ] Data de modificação dos arquivos nem sempre tá sendo salva. (comportamento muito aleatório)
-- [ ] Sincronizar ao conectar APENAS pela primeira vez. E se a pessoa der um get_sync_dir()? outra barreira?
-- [ ] às vezes o get_file recebe o tamanho do arquivo errado, e aí fica num loop infinito. (Talvez isso aconteça com outras funções como send_file também, pois a troca de mensagens é similar)
+- [ ] Às vezes o get_file recebe o tamanho do arquivo errado, e aí fica num loop infinito. (Talvez isso aconteça com outras funções como send_file também, pois a troca de mensagens é similar)
+- [ ] Resolver TODOs
 
 ## Revisar / Finalizar
-- [ ] Resolver TODOs
-- [ ] tirar prints de debug
 - [ ] Testar muito bem para garantir que mutex estão corretos (movi o do inotify mas não cheguei a testar muito bem). Testar tratamento de erros. Testar interface com DEBUG=0.
 - [ ] Desativar debug da compilação final
-- warning valread
+- [ ] tirar prints de debug, warnings...
 
 ## Extra
 - [ ] Ao iniciar o cliente, os arquivos que foram modificados, deletados e adicionados ao sync_dir enquanto o cliente não estava online devem ser enviados ao servidor

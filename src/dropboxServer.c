@@ -112,7 +112,7 @@ int main(int argc, char * argv[]) {
 void sync_server() {
     char method[METHODSIZE];
     int i, d;
-    uint32_t nList = 0, nListConverted;
+    uint16_t nList = 0, nListConverted;
 
     printf("<~ %s requested SYNC\n", username);
 
@@ -121,9 +121,9 @@ void sync_server() {
     // Calculate number of files and send to client
     for (i = 0; i < MAXFILES; i++) {
         if (pClientEntry->file_info[i].size != FREE_FILE_SIZE)
-            nList += strlen(pClientEntry->file_info[i].name) + 1;
+            nList ++;
     }
-    nListConverted = htonl(nList);
+    nListConverted = htons(nList);
     write(sock, &nListConverted, sizeof(nListConverted));
 
     // Find current device

@@ -22,9 +22,11 @@
 
 char server_host[256], server_user[MAXNAME], user_sync_dir_path[256];
 int server_port = 0, sock = 0;
+uint16_t sync_files_left = MAXFILES; // number of files yet to sync
 char *pIgnoredFileEntry; // Pointer to list of ignored files. It's used by inotify to prevent uploading a file that has just best downloaded.
 
 pthread_barrier_t syncbarrier;
+pthread_barrier_t localserverbarrier;
 
 pthread_mutex_t fileOperationMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t inotifyMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -279,10 +281,11 @@ void cmdList() {
 };
 
 void cmdGetSyncDir() {
-    // Create user sync_dir if it doesn't exist
-    makedir_if_not_exists(user_sync_dir_path);
-    // TODO remover sync_client();
-    // TODO sync_dir here! Mutex?
+    // Create user sync_dir if it doesn't exist and then sync files
+    if(makedir_if_not_exists(user_sync_dir_path) == 0){
+        sync_client();
+        pthread_barrier_wait(&syncbarrier); // wait for syncing all files
+    }
 };
 
 void cmdMan() {
@@ -302,16 +305,14 @@ void cmdExit() {
 }
 
 void sync_client() {
-    uint32_t nLeft;
-
     pthread_mutex_lock(&fileOperationMutex);
     debug_printf("[Syncing...]\n");
 
     send(sock, "SYNC", 4, 0);
 
     // Receive number of files
-    read(sock, &nLeft, sizeof(nLeft));
-    nLeft = ntohl(nLeft);
+    read(sock, &sync_files_left, sizeof(sync_files_left));
+    sync_files_left = ntohs(sync_files_left);
 
     /* TODO Sync modifications since last logout
 
@@ -481,7 +482,7 @@ void* local_server(void* unused) {
     addrlen = sizeof(struct sockaddr_in);
     while ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen))) {
 
-        pthread_barrier_wait(&syncbarrier);
+        pthread_barrier_wait(&localserverbarrier);
 
         // Receive a message from server
         while ((read_size = recv(new_socket, server_message, METHODSIZE, 0)) > 0 ) {
@@ -491,6 +492,11 @@ void* local_server(void* unused) {
             if (!strncmp(server_message, "PUSH", 4)) {
                 debug_printf("[received PUSH from server]\n");
                 get_file(server_message + 5, user_sync_dir_path);
+                if (sync_files_left > 1){
+                    sync_files_left--;
+                } else {
+                    pthread_barrier_wait(&syncbarrier);
+                }
             } else if (!strncmp(server_message, "DELETE", 6)) {
                 debug_printf("[received DELETE from server]\n");
                 delete_local_file(server_message + 7);
@@ -542,9 +548,7 @@ int main(int argc, char * argv[]) {
     sprintf(user_sync_dir_path, "%s/sync_dir_%s", getenv("HOME"), server_user);
 
     pthread_barrier_init(&syncbarrier, NULL, 2);
-
-    // Create user sync_dir
-    cmdGetSyncDir();
+    pthread_barrier_init(&localserverbarrier, NULL, 2);
 
     // Send username to server
     write(sock, server_user, strlen(server_user));
@@ -558,22 +562,23 @@ int main(int argc, char * argv[]) {
 
     debug_printf("[Connection established]\n");
 
-    if (pthread_create(&thread_id, NULL, sync_daemon, NULL) < 0) {
-        perror("could not create inotify thread");
-        return 1;
-    }
-
+    // Create thread for local_server
     if (pthread_create(&thread_id, NULL, local_server, NULL) < 0) {
         perror("could not create local_server thread");
         return 1;
     }
 
-    // Create user sync_dir if it not exists
+    // Create user sync_dir and sync files
     printf("Syncing...");
-    // TODO barreira  para esperar par amostrar terminal
-    pthread_barrier_wait(&syncbarrier); // wait for local_server connection
-    sync_client();
+    pthread_barrier_wait(&localserverbarrier); // wait for local_server connection
+    cmdGetSyncDir();
     printf("Done.\n\n");
+
+    // Create inotify thread for monitoring file changes
+    if (pthread_create(&thread_id, NULL, sync_daemon, NULL) < 0) {
+        perror("could not create inotify thread");
+        return 1;
+    }
 
     printf("Welcome to Dropbox! - v 1.0\n");
     cmdMan();
