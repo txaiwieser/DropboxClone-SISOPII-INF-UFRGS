@@ -21,7 +21,7 @@ typedef struct client {
 } CLIENT_t;
 
 /* Struct used in list of clients */
-struct tailq_entry{
+struct tailq_entry {
     CLIENT_t client_entry;
     TAILQ_ENTRY(tailq_entry) entries;
 };
