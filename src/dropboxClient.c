@@ -426,7 +426,7 @@ void* sync_daemon(void* unused) {
     ( void ) inotify_rm_watch( fd, wd );
     ( void ) close( fd );
 
-    exit( 0 ); // REVIEW is it correct? close all the threads?
+    exit( 0 );
 }
 
 // A local server, to handle requests from server
@@ -494,8 +494,7 @@ void* local_server(void* unused) {
             printf("Server disconnected. Closing connection...");
             close_connection();
             exit(0);
-            // TODO mutex? how to exit correctly?
-        }        
+        }
     }
     if (new_socket < 0) {
         perror("accept failed");
