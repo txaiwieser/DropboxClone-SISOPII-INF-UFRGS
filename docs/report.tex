@@ -68,21 +68,37 @@ O projeto foi desenvolvido utilizando um ambiente com as seguintes caracteristic
 	\newline Verifica se o diretório especificado no parâmetro `path` existe.
 
 	\item int connect\_server(char * host, int port)
-	\newline Conecta ao servidor.
+	\newline Abre uma conexão via socket com o `host`.
+\end{itemize}
+
+
+\subsubsection{dropboxServer}
+\begin{itemize}
+	\item struct file\_info
+	\newline Foram feitas duas mudanças na estrutura 'client', a primeira foi a remoção da propriedade 'char extension[MAXNAME]' para evitar duplicações ja que a extensão ja é facilmente recuperada através de 'char name[MAXNAME]'. A outra modificação foi o uso de uma estrutura 'time\_t' ao invés de um 'char *' para a propriedade 'last\_modified'.
 	
+	\item struct client
+	\newline Na estrutura 'client' foram adicionadas duas propriedades, a primeira é a 'int devices\_server[MAXDEVICES]' que armazena sockets 'servidor' do cliente (que recebe requisições de PUSH e DELETE), 'pthread\_mutex\_t mutex' foi adicionado e é o mutex que protege as seções críticas de cada cliente.
 	
+	\item struct tailq\_entry
+	\newline Estrutura usada na lista de clientes.
 	
+	\item void delete\_file(char *file)
+	\newline Remove o arquivo file para do servidor. 'file' – filename.ext
 	
+	\item void *connection\_handler(void *socket\_desc)
+	\newline Trata as conexões para cada cliente.
+
+\end{itemize}
+
+
+\subsubsection{dropboxClient}
+\begin{itemize}
+	\item struct tailq\_entry
+	\newline Estrutura usada na lista de clientes.
 	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+	\item void delete\_server\_file(char *file)
+	\newline Remove o arquivo file para do servidor. 'file' – filename.ext
 \end{itemize}
 \subsection{Testes}
 
