@@ -4,19 +4,18 @@
 3. Inicie o cliente: ```./bin/dropboxClient usuario 127.0.0.1 3003```
 
 ## Alta prioridade
-- [ ] Às vezes o get_file recebe o tamanho do arquivo errado, e aí fica num loop infinito. (Talvez isso aconteça com outras funções como send_file também, pois a troca de mensagens é similar). Tem uma possivel solucao em outro branch (mas ta dando um outro bug...)
+- [ ] Às vezes o get_file recebe o tamanho do arquivo errado, e aí fica num loop infinito. (Talvez isso aconteça com outras funções como send_file também, pois a troca de mensagens é similar). Tem uma possivel solucao em outro branch (mas ta dando um outro bug...) -> Possibilidade de arrumar: enviar usando strings, de tamanho fixo. Testar: colocar sleep antes e depois de enviar o tamanho do arquivo resolve?
 - [ ] Os arquivos devem ser sincronizados toda vez que o cliente conecta ou não? Seria uma boa pelo menos baixar os do servidor que estão com timestamp diferente...
 
-
-## Média prioridade
+## Baixa prioridade
 - [ ] Transmitir timestamps como string? É a forma mais segura aparentemente
-- [ ] Ajeitar saída do programa. Há varios TODOs relacionados a isso..
 
 ## Revisar / Finalizar
 - [ ] Testar muito bem para garantir que mutex estão corretos (movi o do inotify mas não cheguei a testar muito bem). Testar tratamento de erros. Testar interface com DEBUG=0, incluir mensagens de sucesso
 - [ ] tirar prints de debug, warnings... desativar debug na compilação final.. TODOs
 
 ## Extra
+- [ ] Deixar graceful exit 100%
 - [ ] Ao iniciar o cliente, os arquivos que foram modificados, deletados e adicionados ao sync_dir enquanto o cliente não estava online devem ser enviados ao servidor
 
 ### Ideias (abandonadas no momento)
