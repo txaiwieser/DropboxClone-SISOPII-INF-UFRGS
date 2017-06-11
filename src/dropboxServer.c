@@ -112,7 +112,7 @@ int main(int argc, char * argv[]) {
 void sync_server() {
     char method[METHODSIZE];
     int i, d;
-    int32_t nList = 0, nListConverted;
+    uint32_t nList = 0, nListConverted;
 
     printf("<~ %s requested SYNC\n", username);
 
@@ -147,7 +147,7 @@ void sync_server() {
 
 void receive_file(char *file) {
     int valread, file_i, file_found = -1, first_free_index = -1, i;
-    int32_t nLeft, file_size;
+    uint32_t nLeft, file_size;
     char buffer[1024] = {0}, method[METHODSIZE], file_path[256];
     time_t client_file_time;
     struct utimbuf new_times;
@@ -245,7 +245,7 @@ void receive_file(char *file) {
 void send_file(char * file) {
     char file_path[256];
     struct stat st;
-    int32_t length_converted;
+    uint32_t length_converted;
 
     sprintf(file_path, "%s/%s", user_sync_dir_path, file);
 
@@ -345,7 +345,7 @@ void delete_file(char *file) {
 void list_files() {
     char filename_string[MAXNAME];
     int i;
-    int32_t nList = 0, nListConverted;
+    uint32_t nList = 0, nListConverted;
 
     printf("<~ %s requested LIST\n", username);
 

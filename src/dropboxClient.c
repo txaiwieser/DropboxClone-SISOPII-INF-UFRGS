@@ -35,7 +35,7 @@ void send_file(char *file) {
     struct stat st;
     char buffer[1024] = {0}, method[METHODSIZE];
     int valread;
-    int32_t length_converted;
+    uint32_t length_converted;
 
     printf("send_file:antes fileOperationMutex lock\n");
     pthread_mutex_lock(&fileOperationMutex);
@@ -98,7 +98,7 @@ void send_file(char *file) {
 
 void get_file(char *file, char *path) {
     int valread;
-    int32_t nLeft;
+    uint32_t nLeft;
     time_t original_file_time;
     char buffer[1024] = {0}, method[METHODSIZE], file_path[256];
     struct utimbuf new_times;
@@ -135,11 +135,12 @@ void get_file(char *file, char *path) {
               valread = read(sock, &nLeft, sizeof(nLeft));
               nLeft = ntohl(nLeft);
               printf("get_file: 2\n");
+              printf("get_file: 2.1 -> %d\n", nLeft);
               // Receive data in chunks
               while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
                   fwrite(buffer, 1, valread, fp);
                   nLeft -= valread;
-                  printf("get_file: 3 nLeft=%d\n", nLeft);
+                  //printf("get_file: 3 nLeft=%d\n", nLeft);
               }
               printf("get_file: 4\n");
               if (valread < 0) {
@@ -260,7 +261,7 @@ void save_list_of_files() {
 
 void cmdList() {
     int valread;
-    int32_t nLeft;
+    uint32_t nLeft;
     char buffer[1024] = {0};
 
     send(sock, "LIST", 4, 0);
@@ -301,7 +302,7 @@ void cmdExit() {
 }
 
 void sync_client() {
-    int32_t nLeft;
+    uint32_t nLeft;
 
     pthread_mutex_lock(&fileOperationMutex);
     debug_printf("[Syncing...]\n");
@@ -311,7 +312,6 @@ void sync_client() {
     // Receive number of files
     read(sock, &nLeft, sizeof(nLeft));
     nLeft = ntohl(nLeft);
-    printf("passou\n");
 
     /* TODO Sync modifications since last logout
 
