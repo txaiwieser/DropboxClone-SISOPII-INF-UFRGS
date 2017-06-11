@@ -289,7 +289,7 @@ void send_file(char * file) {
         fclose(fp);
 
         // Send file modification time
-        write(sock, &st.st_mtime, sizeof(st.st_mtime)); // TODO use htonl and ntohl?
+        write(sock, &st.st_mtime, sizeof(st.st_mtime));
     } else {
         printf("File doesn't exist!\n");
         write(sock, "ERROR", 5);

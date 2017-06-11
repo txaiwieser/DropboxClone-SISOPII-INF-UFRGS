@@ -57,7 +57,7 @@ void send_file(char *file) {
             debug_printf("[%s method sent]\n", method);
 
             // Send file modification time
-            write(sock, &st.st_mtime, sizeof(st.st_mtime)); // TODO use htonl and ntohl? or string?
+            write(sock, &st.st_mtime, sizeof(st.st_mtime));
 
             // Detect if file was created and local version is newer than server version, so file must be transfered
             valread = read(sock, buffer, sizeof(buffer));
@@ -199,7 +199,7 @@ void delete_local_file(char *file) {
     struct tailq_entry *ignoredfile_node;
     sprintf(filepath, "%s/%s", user_sync_dir_path, file);
 
-    pthread_mutex_lock(&fileOperationMutex); // REVIEW it this mutex needed?
+    pthread_mutex_lock(&fileOperationMutex);
     pthread_mutex_lock(&inotifyMutex); // prevent inotify of deleting file before it's inserted in ignored file list
 
     if(remove(filepath) == 0) {
@@ -519,6 +519,34 @@ void* local_server(void* unused) {
     exit(0);
 }
 
+void copy_file(char *file1, char *file2){
+    char buffer[BUFSIZ];
+    size_t n;
+    struct stat st;
+    FILE *f1, *f2;
+    struct utimbuf new_times;
+
+    if (stat(file2, &st) == 0) {
+        printf("File already exists\n");
+    } else {
+        f1 = fopen (file1, "r");
+        f2 = fopen (file2, "wb");
+
+        if (f1 != NULL && f2 != NULL) {
+            while ((n = fread(buffer, sizeof(char), sizeof(buffer), f1)) > 0){
+                if (fwrite(buffer, sizeof(char), n, f2) != n)
+                    printf("Copy failed\n");
+            }
+            fclose (f1);
+            fclose (f2);
+        }
+
+        new_times.modtime = st.st_mtime;
+        new_times.actime = time(NULL);
+        utime(file2, &new_times);
+    }
+}
+
 int main(int argc, char * argv[]) {
     char cmd[256];
     char filename[256];
@@ -596,8 +624,11 @@ int main(int argc, char * argv[]) {
                 break;
             } else if (strcmp(token, "upload") == 0) {
                 scanf("%s", filename);
-                // TODO Copy file to local sync_dir. (What to do if there's already a file with the same name?)
-                send_file(filename);
+                // Copy file to user sync_dir.
+                char newfilepath[MAXNAME];
+                sprintf(newfilepath, "%s/%s", user_sync_dir_path, basename(filename));
+                copy_file(filename, newfilepath);
+                // send_file(filename); Not necessary anymore because inotify gets it and upload
             } else if (strcmp(token, "download") == 0) {
                 scanf("%s", filename);
                 char cwd[256];
