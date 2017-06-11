@@ -40,9 +40,7 @@ void send_file(char *file) {
     int valread;
     uint32_t length_converted;
 
-    printf("send_file:antes fileOperationMutex lock\n");
     pthread_mutex_lock(&fileOperationMutex);
-    printf("send_file:depois fileOperationMutex lock\n");
 
     if (stat(file, &st) == 0 && S_ISREG(st.st_mode)) { // If file exists
         FILE *fp = fopen(file,"rb");
@@ -95,9 +93,7 @@ void send_file(char *file) {
         printf("File doesn't exist! Pass a valid filename.\n");
     }
 
-    printf("send_file:antes fileOperationMutex unlock\n");
     pthread_mutex_unlock(&fileOperationMutex);
-    printf("send_file:depois fileOperationMutex unlock\n");
 }
 
 void get_file(char *file, char *path) {
@@ -108,9 +104,7 @@ void get_file(char *file, char *path) {
     struct utimbuf new_times;
     struct tailq_entry *ignoredfile_node;
 
-    printf("get_file:antes fileOperationMutex lock\n");
     pthread_mutex_lock(&fileOperationMutex);
-    printf("get_file:depois fileOperationMutex lock\n");
 
     // If current directory is user_sync_dir, overwrite the file. It's another directory, get file only if there's no file with same filename
     if(!file_exists(file) || strcmp(user_sync_dir_path, path) == 0) {
@@ -134,27 +128,19 @@ void get_file(char *file, char *path) {
           if (NULL == fp) {
               printf("Error opening file");
           } else {
-              printf("get_file: 1\n");
               // Receive file size
               valread = read(sock, &nLeft, sizeof(nLeft));
               nLeft = ntohl(nLeft);
-              printf("get_file %s nLeft_converted=%ud\n", file, nLeft);
-              printf("get_file: 2\n");
-              printf("get_file: 2.1 -> %d\n", nLeft);
               // Receive data in chunks
               while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
                   fwrite(buffer, 1, valread, fp);
                   nLeft -= valread;
-                  //printf("get_file: 3 nLeft=%d\n", nLeft);
               }
-              printf("get_file: 4\n");
               if (valread < 0) {
                   printf("\n Read Error \n");
               }
           }
-          printf("get_file: antes lock inotify\n");
           pthread_mutex_lock(&inotifyMutex); // prevent inotify of getting file before it's inserted in ignored file list
-          printf("get_file: depois lock inotify\n");
           fclose (fp);
 
           // Set modtime to original file modtime
@@ -180,9 +166,7 @@ void get_file(char *file, char *path) {
     } else {
         printf("There's already a file named %s in this directory\n", file);
     }
-    printf("get_file:antes fileOperationMutex unlock\n");
     pthread_mutex_unlock(&fileOperationMutex);
-    printf("get_file:depois fileOperationMutex unlock\n");
 };
 
 void delete_server_file(char *file) {
@@ -509,7 +493,6 @@ void* local_server(void* unused) {
                 printf("Server disconnected. Closing connection...");
                 close_connection();
                 exit(0);
-                // TODO mutex? how to exit correctly?
             }
         }
 
@@ -649,7 +632,6 @@ int main(int argc, char * argv[]) {
 }
 
 void close_connection() {
-    // TODO mutex to prevent closing while transfering a file
     // Stop both reception and transmission.
     shutdown(sock, 2);
 }

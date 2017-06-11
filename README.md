@@ -10,11 +10,9 @@
 - [ ] Transmitir timestamps como string? É a forma mais segura aparentemente
 
 ## Revisar / Finalizar
-- [ ] Testar muito bem para garantir que mutex estão corretos (movi o do inotify mas não cheguei a testar muito bem). Testar tratamento de erros. Testar interface com DEBUG=0, incluir mensagens de sucesso
-- [ ] tirar prints de debug, warnings... desativar debug na compilação final.. TODOs
+- [ ] Testar muito bem para garantir que mutex estão corretos (movi o do inotify mas não cheguei a testar muito bem).Testar interface com DEBUG=0, incluir mensagens de sucesso
 
 ## Extra
-- [ ] Deixar graceful exit 100%
 - [ ] Ao iniciar o cliente, os arquivos que foram modificados, deletados e adicionados ao sync_dir enquanto o cliente não estava online devem ser enviados ao servidor
 
 ### Ideias (abandonadas no momento)

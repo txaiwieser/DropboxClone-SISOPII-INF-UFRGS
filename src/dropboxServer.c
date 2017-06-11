@@ -24,7 +24,7 @@ pthread_mutex_t clientCreationLock = PTHREAD_MUTEX_INITIALIZER; // prevent concu
 
 TAILQ_HEAD(, tailq_entry) clients_tailq_head; // List of clients
 
-// Exits gracefully, closing all connections and without interrupting file transfers. TODO add mutex? prevent interrupting file transfers
+// Exits gracefully, closing all connections
 void graceful_exit(int signum) {
     int i;
     char method[] = "CLOSE";
