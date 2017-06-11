@@ -6,6 +6,7 @@
 ## Alta prioridade
 - [ ] Às vezes o get_file recebe o tamanho do arquivo errado, e aí fica num loop infinito. (Talvez isso aconteça com outras funções como send_file também, pois a troca de mensagens é similar). Tem uma possivel solucao em outro branch (mas ta dando um outro bug...)
 - [ ] Resolver TODOs
+- [ ] Os arquivos devem ser sincronizados toda vez que o cliente conecta ou não? Seria uma boa pelo menos baixar os do servidor que estão com timestamp diferente...
 
 ## Revisar / Finalizar
 - [ ] Testar muito bem para garantir que mutex estão corretos (movi o do inotify mas não cheguei a testar muito bem). Testar tratamento de erros. Testar interface com DEBUG=0.
