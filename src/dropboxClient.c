@@ -5,17 +5,18 @@
 #include <stdlib.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/queue.h>
 #define __USE_XOPEN
-#include <time.h>
 #include <utime.h>
 #include <unistd.h>
 #include <netdb.h>
 #include <libgen.h>
 #include <pthread.h>
 #include <math.h>
+#include <stdlib.h>
 #include <dirent.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxClient.h"
@@ -56,7 +57,7 @@ void send_file(char *file) {
             debug_printf("[%s method sent]\n", method);
 
             // Send file modification time
-            write(sock, &st.st_mtime, sizeof(st.st_mtime)); // TODO use htonl and ntohl?
+            write(sock, &st.st_mtime, sizeof(st.st_mtime)); // TODO use htonl and ntohl? or string?
 
             // Detect if file was created and local version is newer than server version, so file must be transfered
             valread = read(sock, buffer, sizeof(buffer));
@@ -420,6 +421,7 @@ void* sync_daemon(void* unused) {
                         if ( (event->mask & IN_CLOSE_WRITE) || (event->mask & IN_MOVED_TO)  ) {
                             debug_printf( "[Daemon: The file %s was created, modified, or moved from somewhere.]\n", event->name );
                             sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
+                            usleep(200); // prevent inotify of getting file before it's metadata is saved by file manager
                             send_file(filepath);
                         } else if ( event->mask & IN_DELETE  ) {
                             debug_printf( "[Daemon: The file %s was deleted.]\n", event->name );
