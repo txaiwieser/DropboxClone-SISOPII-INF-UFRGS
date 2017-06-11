@@ -27,15 +27,14 @@ TAILQ_HEAD(, tailq_entry) clients_tailq_head; // List of clients
 // Exits gracefully, closing all connections
 void graceful_exit(int signum) {
     int i;
-    char method[] = "CLOSE";
     struct tailq_entry *client_node;
 
     printf("\nClosing all connections...\n");
     TAILQ_FOREACH(client_node, &clients_tailq_head, entries) {
         for(i = 0; i < MAXDEVICES; i++ ) {
             if(client_node->client_entry.devices[i] != INVALIDSOCKET && client_node->client_entry.devices[i] != sock) {
-                write(client_node->client_entry.devices_server[i], method, sizeof(method));
-                printf("~> Sent CLOSE to %s's device %d\n", client_node->client_entry.userid, i);
+                shutdown(client_node->client_entry.devices[i], 2);
+                shutdown(client_node->client_entry.devices_server[i], 2);
             }
         }
     }

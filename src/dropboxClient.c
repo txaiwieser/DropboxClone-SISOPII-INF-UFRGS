@@ -488,14 +488,14 @@ void* local_server(void* unused) {
             } else if (!strncmp(server_message, "DELETE", 6)) {
                 debug_printf("[received DELETE from server]\n");
                 delete_local_file(server_message + 7);
-            } else if (!strncmp(server_message, "CLOSE", 5)) {
-                debug_printf("[received CLOSE from server]\n");
-                printf("Server disconnected. Closing connection...");
-                close_connection();
-                exit(0);
             }
         }
-
+        if (read_size == 0) {
+            printf("Server disconnected. Closing connection...");
+            close_connection();
+            exit(0);
+            // TODO mutex? how to exit correctly?
+        }        
     }
     if (new_socket < 0) {
         perror("accept failed");
