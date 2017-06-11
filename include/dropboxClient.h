@@ -1,7 +1,7 @@
 #include "dropboxUtil.h"
 
 /* Struct used in list of ignored files */
-struct tailq_entry{
+struct tailq_entry {
     char filename[MAXNAME];
     TAILQ_ENTRY(tailq_entry) entries;
 };
