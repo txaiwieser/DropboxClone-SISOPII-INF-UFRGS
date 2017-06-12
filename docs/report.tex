@@ -58,7 +58,7 @@ A terceira thread representa um servidor local (\textit{local\_server}), encarre
 
 Ademais, foi criada uma lista de arquivos ignorados, utilizada para evitar que arquivos recém baixados ou removidos por ordem do servidor sejam capturados pelo \textit{daemon}. Quando a aplicação cliente recebe um \textit{PUSH} ou um \textit{DELETE} do servidor e, respectivamente, baixa ou remove o arquivo solicitado, o arquivo é inserido nessa lista. Assim, quando o \textit{inofity} percebe que algum desses arquivos é alterado, o encontra na lista de arquivos ignorados e então não propaga essas alterações ao servidor. Desse modo, evita-se situações em que diferentes dispositivos do mesmo usuário ficam enviando o mesmo arquivo um para o outro infinitamente. Por fim, o arquivo é excluído dessa lista, para que novas modificações nele possam ser capturadas pelo \textit{inotify}.
 
-A aplicação servidor é composta por uma thread principal responsável por lidar com as requisições de conexões dos clientes. A cada tentativa de conexão que aceita pelo servidor, uma nova thread é criada para o usuário solicitante. Essa thread aguarda requisições do cliente e gerencia o envio e remoção de arquivos na pasta \textit{server\_sync\_dir} do cliente. Além disso, quando um arquivo é recebido ou removido pelo servidor, a thread é encarregada de propagar essas alterações, através do envio de mensagens \textit{PUSH} e \textit{DELETE}, aos outros dispositivos conectados do usuário.
+A aplicação servidor é composta por uma thread principal responsável por lidar com as requisições de conexões dos clientes. A cada tentativa de conexão que é aceita pelo servidor, uma nova thread é criada para o usuário solicitante. Essa thread aguarda requisições do cliente e gerencia o envio e remoção de arquivos na pasta \textit{server\_sync\_dir} do cliente. Além disso, quando um arquivo é recebido ou removido pelo servidor, a thread é encarregada de propagar essas alterações, através do envio de mensagens \textit{PUSH} e \textit{DELETE}, aos outros dispositivos conectados do usuário.
 
 \subsection{Sincronização}
 
@@ -83,7 +83,7 @@ Cliente -> Servidor:
 \newline Cliente pede ao servidor o arquivo definido em file. O servidor responde confirmando a requisição, seguido pelo tamanho do arquivo e os dados do arquivo em si.
 
 \item UPLOAD 'file':
-\newline Cliente comunica ao servidor que um arquivo deseja ser enviado seguido pela sua data de modificação. O servidor compara se o arquivo do cliente é mais recente do que o do servidor, nesse caso o servidor responde aceitando a transação, assim que o cliente recebe a confirmação positiva do request ele envia o tamanho do arquivo seguido pelos dados do arquivo em si.
+\newline Cliente comunica ao servidor que um arquivo deseja ser enviado seguido pela sua data de modificação. O servidor compara se o arquivo do cliente é mais recente do que o do servidor. Nesse caso, o servidor responde aceitando a transação, e assim que o cliente recebe a confirmação do request, envia o tamanho do arquivo seguido pelos dados do arquivo em si.
 
 \item DELETE 'file'
 \newline Cliente avisa ao servidor que um arquivo deve ser deletado.
@@ -100,7 +100,7 @@ Servidor -> Cliente:
 \newline Servidor avisa ao cliente que um arquivo deve ser baixado, a partir dessa mensagem o cliente envia um request \textit{DOWNLOAD 'file'}.
 
 \item DELETE 'file' [server -> client]:
-\newline Servidor avisa ao cliente que um arquivo ser deletado.
+\newline Servidor avisa ao cliente que um arquivo deve ser deletado.
 
 \end{itemize}
 
@@ -151,7 +151,7 @@ Ademais, o mecanismo de sinais também foi utilizado. Quando o processo servidor
 \end{itemize}
 
 \subsection{Testes}
-Para testar a aplicação cliente e servidor, utilizamos métodos não automatizados (manuais). Foram realizados testes das funções da especificação através da interface de linha de comando (CLI) da aplicação cliente e os resultados foram sendo verificados nos diretórios dos servidores e clientes.
+Para testar a aplicação cliente e servidor, utilizamos métodos não automatizados (manuais). Foram realizados testes das funções da especificação através da interface de linha de comando (CLI) da aplicação cliente e os resultados foram sendo verificados nos diretórios do servidor e de clientes.
 
 Um ponto importante e difícil de testar na prática foram as proteções de seções críticas. Para isso, tentou-se simular as condições de corrida de forma a realizar testes antes e depois da adição das variáreis de \textit{mutex} com o objetivo de comprovar a eficácia das mesmas.
 
@@ -175,6 +175,6 @@ No entanto, apesar de termos começado a implementação, não a concluímos por
 \section{Conclusões}
 Ao terminar a implementação do trabalho, percebemos o quanto aprendemos com a construção do mesmo. Ao analisar a especificação vimos que teríamos que aprender diversas técnicas para construir a aplicação, como notificações do sistema de arquivos, comunicação utilizando sockets, proteções de seções críticas, barreiras, threads, e tudo isso utilizando uma linguagem de mais baixo nível. Mas construindo aos poucos, fomos estruturando nosso conhecimento e cada vez entendendo mais sobre o escopo envolvido.
 
-A oportunidade de poder colocar em prática os conhecimentos adquiridos na disciplina (e no restante do curso) em um trabalho com conceitos e funções bem atuais foi fantástica. Implementar em um trabalho funções similares a serviços/produtos populares (como o Dropbox) nos faz relacionar e visualizar os conceitos aprendidos com o que utilizamos no nosso dia-a-dia.
+A oportunidade de poder colocar em prática os conhecimentos adquiridos na disciplina (e no restante do curso) em um trabalho com conceitos e funções bem atuais foi fantástica. Implementar em um trabalho funções similares a serviços/produtos populares (como o Dropbox) nos faz relacionar e visualizar os conceitos aprendidos com o que realmente utilizamos no nosso dia-a-dia.
 
 \end{document}
