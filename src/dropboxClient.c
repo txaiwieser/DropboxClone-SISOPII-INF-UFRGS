@@ -408,7 +408,7 @@ void* sync_daemon(void* unused) {
                         if ( (event->mask & IN_CLOSE_WRITE) || (event->mask & IN_MOVED_TO)  ) {
                             debug_printf( "[Daemon: The file %s was created, modified, or moved from somewhere.]\n", event->name );
                             sprintf(filepath, "%s/%s", user_sync_dir_path, event->name);
-                            usleep(200); // prevent inotify of getting file before it's metadata is saved by file manager
+                            usleep(50000); // prevent inotify of getting file before it's metadata is saved by file manager
                             send_file(filepath);
                         } else if ( event->mask & IN_DELETE  ) {
                             debug_printf( "[Daemon: The file %s was deleted.]\n", event->name );
