@@ -388,7 +388,7 @@ void free_device() {
             }
 
             // Set logged_in to 0 if user is not connected anymore in any device.
-            if (client_node->client_entry.devices[0] == INVALIDSOCKET && client_node->client_entry.devices[0] == INVALIDSOCKET) {
+            if (client_node->client_entry.devices[0] == INVALIDSOCKET && client_node->client_entry.devices[1] == INVALIDSOCKET) {
                 client_node->client_entry.logged_in = 0;
             }
 
