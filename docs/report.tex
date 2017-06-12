@@ -16,13 +16,13 @@
 
 \title{Dropbox - Parte I}
 \author{Augusto Bennemann, Fabrício Martins Mazzola e Txai Wieser}
-
+\date{}
 \begin{document}
 \maketitle
 
-\begin{abstract}
-Your abstract.
-\end{abstract}
+%\begin{abstract}
+%Your abstract.
+%\end{abstract}
 
 \section{Ambiente de desenvolvimento e teste}
 
@@ -30,19 +30,19 @@ O projeto foi desenvolvido utilizando um ambiente com as seguintes caracteristic
 \begin{itemize}
 	\item Configuração da máquina:
 	\begin{itemize}
-		\item Processador(es):
-		\item Memória:
+		\item Processador(es): Intel Core i5-2520M
+		\item Memória: 2x Kingston 4GB 1333Mhz DDR3
 	\end{itemize}
 
 	\item{Sistema operacional}: 
 	\begin{itemize}
-		\item Distribuição:
-		\item Versão:
+		\item Distribuição: Debian GNU/Linux 
+		\item Versão: Stretch (testing) Kernel 4.9.0-3-amd64
 	\end{itemize}
 
 	\item Software suporte:
 	\begin{itemize}
-		\item Compiladores (versões):
+		\item Compiladores (versões): gcc 6.3.0 20170516
 	\end{itemize}
 \end{itemize}
 
@@ -50,15 +50,15 @@ O projeto foi desenvolvido utilizando um ambiente com as seguintes caracteristic
 
 \subsection{Funcionamento}
 
-A aplicação do cliente possui 3 threads, a primeira é o 'shell', que fica espera comandos através da CLI.
-A segunda thread fica aguardando notificações do sistema de arquivos, através da biblioteca 'inotify', pra monitorar as modificações de arquivos no diretório 'sync\_dir' do usuário. Quando o arquivo é criado ou renomeado, faz o upload pro servidor. E quando o arquivo é deletado, envia um comando de DELETE pro servidor.
-A terceira thread é a local\_server, que fica ouvindo chamadas de PUSH e DELETE do servidor.
+A aplicação do cliente é composta por três threads\textcolor{red}{. A primeira thread representa a interface entre os comandos disponíveis para o usuário e a comunicação entre cliente e servidor (shell). Ela é responsável por esperar comandos inseridos pelo usuário através da CLI e invocar as primitivas correspondentes na aplicação cliente. A segunda thread é reponsável por aguardar notificações do sistema de arquivos, através da biblioteca 'inotify', com o objetivo de monitorar as modificações realizadas nos arquivos presentes no diretório 'sync\_dir' do usuário. Quando um evento de criação ou renomeação de arquivo for constatado, a thread irá, automaticamente, fazer o upload desse arquivo para o servidor.} 
+%A segunda thread fica aguardando notificações do sistema de arquivos, através da biblioteca 'inotify', pra monitorar as modificações de arquivos no diretório 'sync\_dir' do usuário. Quando o arquivo é criado ou renomeado, faz o upload pro servidor.E quando o arquivo é deletado, envia um comando de DELETE pro servidor.
+\textcolor{red}{A terceira thread representa um local\_server, encarregado de ficar ouvindo chamadas de PUSH e DELETE vindas do servidor. Essas chamadas são utilizadas com o objetivo de manter a consistência e a sincronização entre os dispositivos dos clientes. Ao receber uma chamada PUSH, a aplicação cliente irá, de forma implícita, realizar o download do arquivo informado pelo servidor. O recebimento de uma chamada DELETE fará a aplicação cliente remover o arquivo especificado da pasta sync\_dir do usuário}
+%A terceira thread é a local\_server, que fica ouvindo chamadas de PUSH e DELETE do servidor.
 
-O servidor possui uma thread principal que é responsável por lidar com as requisições de conexões dos clientes. Para cada cliente (por dispositivo) que realiza a conexão é criada uma thread. Essa thread fica aguardando as requisições do cliente. Quando um arquivo é recebido pelos servidor ele propaga as alterações pros outros dispositivos conectados, enviando mensagens de PUSH e DELETE.
+\textcolor{red}{A aplicação servidor possui uma thread principal que é responsável por lidar com as requisições de conexões dos clientes. Para cada cliente (por dispositivo) que realiza a conexão é criada uma thread. Essa thread fica aguardando as requisições do cliente. Quando um arquivo é recebido pelos servidor ele propaga as alterações pros outros dispositivos conectados, enviando mensagens de PUSH e DELETE.}
+%O servidor possui uma thread principal que é responsável por lidar com as requisições de conexões dos clientes. Para cada cliente (por dispositivo) que realiza a conexão é criada uma thread. Essa thread fica aguardando as requisições do cliente. Quando um arquivo é recebido pelos servidor ele propaga as alterações pros outros dispositivos conectados, enviando mensagens de PUSH e DELETE.
 
 Foi implementado no client uma lista de arquivos ignorados. Essa lista mantém os arquivos que devem ser ignorados na próxima vez que o 'inotify' perceber que eles foram alterados. Os arquivos são incluídos nessa lista quando o cliente recebe um PUSH do servidor e faz download de um arquivo, e quando recebe um DELETE do servidor e o deleta. Assim, quando o 'inofity' é executado e recebe a informação esses arquivos  foram modificados/removidos, podemos ignorar e evitar mandar um UPLOAD/DELETE para o servidor. Após essa detecção é feita a remoção do arquivo da lista.
-
-\subsection{Concorrência no servidor}
 
 \subsection{Sincronização}
 
@@ -72,19 +72,43 @@ Temos duas barreiras no cliente, a primeira é a 'syncbarrier', garante que o 's
 A segunda barreira no cliente é a 'localserverbarrier', que garante que a sincronização inicial de arquivos só será feito após o local\_server estar disponível para aceitar conexões.
 
 \subsection{Comunicação}
+A comunicação entre os clientes e o servidor é feita através de sockets TCP, cada cliente (por device) tem seu socket iniciado durante sua inicialização. Os comandos basicos da comunicação são descritos abaixo:
+\begin{itemize}
+\item LIST:
+\newline Cliente pede ao servidor uma lista com os arquivos salvos. O servidor responde confirmando a requisição, seguido pela quantidade de arquivos e pelos nomes dos mesmos.
+
+\item DOWNLOAD 'file':
+\newline Cliente pede ao servidor o arquivo definido em file. O servidor responde confirmando a requisição, seguido pelo tamanho do arquivo e os dados do arquivo em sí.
+
+\item UPLOAD 'file':
+\newline Cliente comunica ao servidor que um arquivo deseja ser enviado seguido pela sua data de modificação. O servidor compara se o arquivo do cliente é mais recente do que o do servidor, nesse caso o servidor responde aceitando a transação, assim que o cliente recebe a confirmação positiva do request ele envia o tamanho do arquivo seguido pelos dados do arquivo em sí.
+
+\item DELETE 'file' [client -> server]:
+\newline Cliente avisa ao servidor que um arquivo deve ser deletado.
+
+\item DELETE 'file' [server -> client]:
+\newline Servidor avisa ao cliente que um arquivo ser deletado.
+
+\item SYNC 'file':
+\newline Cliente pede para ao servidor para realizar a sincronia do diretório. Nesse caso o servidor responde o numero de arquivos a serem sincronizados. E para cada arquivo a ser sincronizado, o servidor começa o envio através da comunicação "PUSH 'file'".
+
+\item PUSH 'file':
+\newline Servidor avisa ao cliente que um arquivo deve ser baixado, a partir dessa mensagem o cliente envia um request "DOWNLOAD 'file'".
+
+\end{itemize}
 
 \subsection{Estruturas e funções adicionais}
 
 \subsubsection{dropboxUtil}
 \begin{itemize}
 	\item void makedir\_if\_not\_exists(const char* path)
-	\newline Verifica se o diretório especificado no parâmetro `path` existe e caso contrario o cria.
+	\newline Verifica se o diretório especificado no parâmetro 'path' existe e caso contrario o cria.
 	
 	\item int file\_exists(const char* path)
-	\newline Verifica se o diretório especificado no parâmetro `path` existe.
+	\newline Verifica se o diretório especificado no parâmetro 'path' existe.
 
-	\item int connect\_server(char * host, int port)
-	\newline Abre uma conexão via socket com o `host`.
+	\item int connect\_server(char* host, int port)
+	\newline Abre uma conexão via socket com o 'host'.
 \end{itemize}
 
 
@@ -117,14 +141,33 @@ A segunda barreira no cliente é a 'localserverbarrier', que garante que a sincr
 	\newline Remove o arquivo file para do servidor. 'file' – filename.ext
 \end{itemize}
 
-\subsubsection{SIGNAL}
+\subsubsection{signal}
 Ao terminar o processo do servidor (usando CTRL+C, por exemplo), recebemos a notificação do signal enviado (SIGINT) e então realizamos a saída de modo 'gracefully'. Isso faz com que a conexão seja fechada na hora, e assim o cliente percebe e encerra também, com uma mensagem de erro "servidor desconectou, saindo...".
 
 \subsection{Testes}
 
 \section{Dificuldades encontradas}
+
+\subsection{Data de modificação incorreta}
+Ao receber arquivos, tanto no cliente como no serviro, às vezes a data de modificação estava sendo gravada incorreta.
+
+No caso do cliente, o problema estava no fato de que não havia uma exclusão mútua entre o salvamento da data de modificação e o daemon. Assim, quando o arquivo era fechado, o lock era liberado e o daemon prontamente captava e disparava se (PERA, TA ERRADO). A solução foi.
+
+Já no caso do servidor, a data já vinha errada do cliente. O que aconecia é que daemon capturava a modificação do arquivo assim que ele era fechado
+va a alteração assim q o arquivo era fechado, mas algumas vezes antes que o metadado de data de modificação fosse escrito. Esse caso ocorria quando colava algum aruqivo pelo filemanager. A solução foi colocar um pequeno sleep (de xxxx ms) para que o inotify espere.
+
+tanto no cliente como no servidorno cliente, ao receber um arquivo; no servidor, ao receber um novo arquivo do  no cliente; quando alterava algum arquivo no seu diretório de sincronização e era feito o upload.
+\subsection{Utilização de exlusões mútuas}
+colocar os mutex sem causar deadlock foi mais dificil q o esperado
+
+\subsection{Leitura de inteiros errados pelo socket}
+Alguns dados estavam chegando corrompidos. solucionamos definindo um tamanho fixo para as mensagens de method e também para os errose confirmacoes (ER, OK), pq senao acabava lendo algo do outro dado (so de vez em quando, nao sempre)
  
-\bibliographystyle{alpha}
-\bibliography{sample}
+\subsection{Sincronização de alterações offline}
+Seria otimo que as alterações feitas durante o período em que o usuário esteve offline pudessem ser refletidas no servidor assim que ele se conectasse. Pensando nisso, fizemos com que o client salve um arquivo dropboxfiles no syncdir do usuario toda vez que é encerrado.
+Essa é uma lista com os nomes e data de modificação de cada arquivo. Assim, ao conectar novamente o cliente poderia comparar os arquivos que estão natualmente no diretorio de sincronização e a partir disso descobrir quais foram alterados, modificados e excluidos. COmeçamos a fazer isso, mas não implementamos de fato a parte de sincronização pois se mostrou um pouco mais complexa ter que fazer a comparação entre as duas lista de arquivo e as versẽs do servidor. nao fizemos por questao de tempo?
+
+%\bibliographystyle{alpha}
+%\bibliography{sample}
 
 \end{document}
