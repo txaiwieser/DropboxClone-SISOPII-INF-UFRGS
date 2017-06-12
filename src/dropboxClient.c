@@ -25,6 +25,7 @@ char server_host[256], server_user[MAXNAME], user_sync_dir_path[256];
 int server_port = 0, sock = 0;
 uint16_t sync_files_left = MAXFILES, original_sync_files_left = MAXFILES;  // number of files yet to sync
 char *pIgnoredFileEntry; // Pointer to list of ignored files. It's used by inotify to prevent uploading a file that has just best downloaded.
+int inotify_run = 0;
 
 pthread_barrier_t syncbarrier;
 pthread_barrier_t localserverbarrier;
@@ -266,14 +267,7 @@ void cmdList() {
     }
 };
 
-void cmdGetSyncDir() {
-    // Create user sync_dir if it doesn't exist and then sync files
-    if(makedir_if_not_exists(user_sync_dir_path) == 0){
-        sync_client();
-        if (original_sync_files_left > 0)
-            pthread_barrier_wait(&syncbarrier); // wait for syncing all files
-    }
-};
+
 
 void cmdMan() {
     printf("\nAvailable commands:\n");
@@ -430,6 +424,27 @@ void* sync_daemon(void* unused) {
     exit( 0 );
 }
 
+void cmdGetSyncDir() {
+    pthread_t thread_id;
+    // Create user sync_dir if it doesn't exist and then sync files
+    if(makedir_if_not_exists(user_sync_dir_path) == 0){
+        // Create inotify thread for monitoring file changes
+		if (pthread_create(&thread_id, NULL, sync_daemon, NULL) < 0) {
+		    perror("could not create inotify thread");
+		}
+		inotify_run=1;
+        sync_client();
+        if (original_sync_files_left > 0)
+            pthread_barrier_wait(&syncbarrier); // wait for syncing all files
+    } else if(inotify_run == 0){
+        // Create inotify thread for monitoring file changes
+		if (pthread_create(&thread_id, NULL, sync_daemon, NULL) < 0) {
+		    perror("could not create inotify thread");	
+		}
+		inotify_run=1;
+    }
+};
+
 // A local server, to handle requests from server
 void* local_server(void* unused) {
     int server_fd, new_socket, read_size, addrlen;
@@ -483,8 +498,9 @@ void* local_server(void* unused) {
                 get_file(server_message + 5, user_sync_dir_path);
                 if (sync_files_left > 1){
                     sync_files_left--;
-                } else {
+                } else if(sync_files_left == 1  && original_sync_files_left >= 1){
                     pthread_barrier_wait(&syncbarrier);
+		    sync_files_left--;
                 }
             } else if (!strncmp(server_message, "DELETE", 6)) {
                 debug_printf("[received DELETE from server]\n");
@@ -589,12 +605,6 @@ int main(int argc, char * argv[]) {
     pthread_barrier_wait(&localserverbarrier); // wait for local_server connection
     cmdGetSyncDir();
     printf("Done.\n\n");
-
-    // Create inotify thread for monitoring file changes
-    if (pthread_create(&thread_id, NULL, sync_daemon, NULL) < 0) {
-        perror("could not create inotify thread");
-        return 1;
-    }
 
     printf("Welcome to Dropbox! - v 1.0\n");
     cmdMan();
