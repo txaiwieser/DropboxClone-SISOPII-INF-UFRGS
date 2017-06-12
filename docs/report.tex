@@ -50,84 +50,93 @@ O projeto foi desenvolvido utilizando um ambiente com as seguintes caracteristic
 
 \subsection{Funcionamento}
 
-A aplicação do cliente é composta por três threads\textcolor{red}{. A primeira thread representa a interface entre os comandos disponíveis para o usuário e a comunicação entre cliente e servidor (shell). Ela é responsável por esperar comandos inseridos pelo usuário através da CLI e invocar as primitivas correspondentes na aplicação cliente. A segunda thread é reponsável por aguardar notificações do sistema de arquivos, através da biblioteca 'inotify', com o objetivo de monitorar as modificações realizadas nos arquivos presentes no diretório 'sync\_dir' do usuário. Quando um evento de criação ou renomeação de arquivo for constatado, a thread irá, automaticamente, fazer o upload desse arquivo para o servidor.} 
-%A segunda thread fica aguardando notificações do sistema de arquivos, através da biblioteca 'inotify', pra monitorar as modificações de arquivos no diretório 'sync\_dir' do usuário. Quando o arquivo é criado ou renomeado, faz o upload pro servidor.E quando o arquivo é deletado, envia um comando de DELETE pro servidor.
-\textcolor{red}{A terceira thread representa um local\_server, encarregado de ficar ouvindo chamadas de PUSH e DELETE vindas do servidor. Essas chamadas são utilizadas com o objetivo de manter a consistência e a sincronização entre os dispositivos dos clientes. Ao receber uma chamada PUSH, a aplicação cliente irá, de forma implícita, realizar o download do arquivo informado pelo servidor. O recebimento de uma chamada DELETE fará a aplicação cliente remover o arquivo especificado da pasta sync\_dir do usuário}
-%A terceira thread é a local\_server, que fica ouvindo chamadas de PUSH e DELETE do servidor.
+A aplicação do cliente é composta por três threads. A primeira thread representa a interface entre os comandos disponíveis para o usuário e a comunicação entre cliente e servidor (shell). Ela é responsável por esperar comandos inseridos pelo usuário através da CLI e invocar as primitivas correspondentes na aplicação cliente. 
 
-\textcolor{red}{A aplicação servidor possui uma thread principal que é responsável por lidar com as requisições de conexões dos clientes. Para cada cliente (por dispositivo) que realiza a conexão é criada uma thread. Essa thread fica aguardando as requisições do cliente. Quando um arquivo é recebido pelos servidor ele propaga as alterações pros outros dispositivos conectados, enviando mensagens de PUSH e DELETE.}
-%O servidor possui uma thread principal que é responsável por lidar com as requisições de conexões dos clientes. Para cada cliente (por dispositivo) que realiza a conexão é criada uma thread. Essa thread fica aguardando as requisições do cliente. Quando um arquivo é recebido pelos servidor ele propaga as alterações pros outros dispositivos conectados, enviando mensagens de PUSH e DELETE.
+A segunda thread é um \textit{daemon} responsável por aguardar notificações do sistema de arquivos, através da biblioteca \textit{inotify}. O objetivo da thread é de monitorar as modificações realizadas nos arquivos presentes no diretório de sincronização do usuário (\textit{sync\_dir}). Quando um evento de criação ou renomeação de arquivo é constatado, essa thread automaticamente faz o upload desse arquivo para o servidor.
 
-Foi implementado no client uma lista de arquivos ignorados. Essa lista mantém os arquivos que devem ser ignorados na próxima vez que o 'inotify' perceber que eles foram alterados. Os arquivos são incluídos nessa lista quando o cliente recebe um PUSH do servidor e faz download de um arquivo, e quando recebe um DELETE do servidor e o deleta. Assim, quando o 'inofity' é executado e recebe a informação esses arquivos  foram modificados/removidos, podemos ignorar e evitar mandar um UPLOAD/DELETE para o servidor. Após essa detecção é feita a remoção do arquivo da lista.
+A terceira thread representa um servidor local (\textit{local\_server}), encarregado de ouvir chamadas de \textit{PUSH} e \textit{DELETE} vindas do servidor. Essas chamadas são utilizadas com o objetivo de manter a consistência e a sincronização entre os dispositivos dos clientes. Ao receber uma chamada \textit{PUSH filename}, a aplicação cliente realiza, de forma implícita, o download do arquivo \textit{filename}. De modo similar, o recebimento de uma chamada \textit{DELETE filename} fará a aplicação cliente remover o arquivo \textit{filename} da pasta de sincronização do usuário.
+
+Ademais, foi criada uma lista de arquivos ignorados, utilizada para evitar que arquivos recém baixados ou removidos por ordem do servidor sejam capturados pelo \textit{daemon}. Quando a aplicação cliente recebe um \textit{PUSH} ou um \textit{DELETE} do servidor e, respectivamente, baixa ou remove o arquivo solicitado, o arquivo é inserido nessa lista. Assim, quando o \textit{inofity} percebe que algum desses arquivos é alterado, o encontra na lista de arquivos ignorados e então não propaga essas alterações ao servidor. Desse modo, evita-se situações em que diferentes dispositivos do mesmo usuário ficam enviando o mesmo arquivo um para o outro infinitamente. Por fim, o arquivo é excluído dessa lista, para que novas modificações nele possam ser capturadas pelo \textit{inotify}.
+
+A aplicação servidor é composta por uma thread principal responsável por lidar com as requisições de conexões dos clientes. A cada tentativa de conexão que aceita pelo servidor, uma nova thread é criada para o usuário solicitante. Essa thread aguarda requisições do cliente e gerencia o envio e remoção de arquivos na pasta \textit{server\_sync\_dir} do cliente. Além disso, quando um arquivo é recebido ou removido pelo servidor, a thread é encarregada de propagar essas alterações, através do envio de mensagens \textit{PUSH} e \textit{DELETE}, aos outros dispositivos conectados do usuário.
 
 \subsection{Sincronização}
 
-No cliente utilizamos dois mutex, o 'fileOperationMutex' serve para garantir que somente uma operação de arquivo seja feita por vez, e o 'inotifyMutex' serve para garantir que o 'inotify' não seja ativado antes que um arquivo seja 'incluído' na lista de arquivos ignorados.
+A sincronização da aplicação cliente foi feita utilizando-se duas variáveis de mutex: \textit{fileOperationMutex} e \textit{inotifyMutex}. A primeira considera uma operação sobre um arquivo como seção crítica e é usada para garantir que somente uma operação (p. ex. download, upload) seja realizada por vez. Já a segunda considera manipulações na lista de arquivos ignorados e nos \textit{timestamps} dos arquivos como seção crítica, de modo a garantir que o \textit{inotify} não seja ativado antes que um arquivo seja incluído na lista de arquivos ignorados e/ou tenha sua data de modificação original salva.
 
-Já no servidor, utilizamos somente um mutex (armazenado na struct do usuário) para garantir que algumas coisas, como por exemplo a conexão inicial no servidor, sejam executadas em somente um dispositivo por vez.
+Na aplicação servidor, utilizou-se somente uma variável de mutex: \textit{clientCreationLock}. Essa variável é armazenada na struct de cada usuário e serve para garantir que a conexão de clientes ao servidor sejam executada em somente um dispositivo por vez.
 
-Além de proteção de seções críticas, implementamos algumas barreiras, para realizar a sincronização de tarefas do cliente.
-
-Temos duas barreiras no cliente, a primeira é a 'syncbarrier', garante que o 'shell' do dropbox só apareça depois que for feita uma conexão com sucesso ao servidor. Assim, a thread principal de interação com o usuário fica travada até a conexão, mostrando uma mensagem de sincronia "syncing..." até que a sincronização tenha sido completada.
-A segunda barreira no cliente é a 'localserverbarrier', que garante que a sincronização inicial de arquivos só será feito após o local\_server estar disponível para aceitar conexões.
+Além de proteção de seções críticas, duas barreiras - \textit{syncbarrier} e \textit{localserverbarrier} - foram utilizadas para realizar a sincronização entre diferentes tarefas do cliente. A primeira barreira garante que o \textit{shell} somente seja exibido para o usuário depois que a conexão com o servidor for realizada com sucesso. Enquanto a thread principal permanece bloqueada esperando a sincronização ser concluída, uma mensagem de "Syncing..." é exibida ao usuário. Uma vez terminada a sincronização, uma mensagem de "Done" é exibida e então o programa passa a esperar pelos comandos do usuário.
+A segunda barreira garante que a sincronização inicial de arquivos só será feita após o servidor local (\textit{local\_server}) estar disponível, ouvindo requisições do servidor do Dropbox.
 
 \subsection{Comunicação}
-A comunicação entre os clientes e o servidor é feita através de sockets TCP, cada cliente (por device) tem seu socket iniciado durante sua inicialização. Os comandos basicos da comunicação são descritos abaixo:
+A comunicação entre os clientes e o servidor é realizada por meio de sockets TCP. No momento em que a conexão TCP é estabelecida, um socket único é criado para cada dispositivo de cliente. Os comandos básicos da comunicação são descritos abaixo:
+
+
+Cliente -> Servidor:
+
 \begin{itemize}
 \item LIST:
 \newline Cliente pede ao servidor uma lista com os arquivos salvos. O servidor responde confirmando a requisição, seguido pela quantidade de arquivos e pelos nomes dos mesmos.
 
 \item DOWNLOAD 'file':
-\newline Cliente pede ao servidor o arquivo definido em file. O servidor responde confirmando a requisição, seguido pelo tamanho do arquivo e os dados do arquivo em sí.
+\newline Cliente pede ao servidor o arquivo definido em file. O servidor responde confirmando a requisição, seguido pelo tamanho do arquivo e os dados do arquivo em si.
 
 \item UPLOAD 'file':
-\newline Cliente comunica ao servidor que um arquivo deseja ser enviado seguido pela sua data de modificação. O servidor compara se o arquivo do cliente é mais recente do que o do servidor, nesse caso o servidor responde aceitando a transação, assim que o cliente recebe a confirmação positiva do request ele envia o tamanho do arquivo seguido pelos dados do arquivo em sí.
+\newline Cliente comunica ao servidor que um arquivo deseja ser enviado seguido pela sua data de modificação. O servidor compara se o arquivo do cliente é mais recente do que o do servidor, nesse caso o servidor responde aceitando a transação, assim que o cliente recebe a confirmação positiva do request ele envia o tamanho do arquivo seguido pelos dados do arquivo em si.
 
-\item DELETE 'file' [client -> server]:
+\item DELETE 'file'
 \newline Cliente avisa ao servidor que um arquivo deve ser deletado.
+
+\item SYNC:
+\newline Cliente pede para ao servidor para realizar a sincronia do diretório. Nesse caso o servidor responde o numero de arquivos a serem sincronizados. E para cada arquivo a ser sincronizado, o servidor começa o envio através da comunicação \textit{PUSH 'file'}.
+\end{itemize}
+
+Servidor -> Cliente:
+
+\begin{itemize}
+
+\item PUSH 'file':
+\newline Servidor avisa ao cliente que um arquivo deve ser baixado, a partir dessa mensagem o cliente envia um request \textit{DOWNLOAD 'file'}.
 
 \item DELETE 'file' [server -> client]:
 \newline Servidor avisa ao cliente que um arquivo ser deletado.
 
-\item SYNC 'file':
-\newline Cliente pede para ao servidor para realizar a sincronia do diretório. Nesse caso o servidor responde o numero de arquivos a serem sincronizados. E para cada arquivo a ser sincronizado, o servidor começa o envio através da comunicação "PUSH 'file'".
-
-\item PUSH 'file':
-\newline Servidor avisa ao cliente que um arquivo deve ser baixado, a partir dessa mensagem o cliente envia um request "DOWNLOAD 'file'".
-
 \end{itemize}
+
+Ademais, o mecanismo de sinais também foi utilizado. Quando o processo servidor é encerrado por meio da combinação de teclas \textit{CTRL + c}, o sinal \textit{SIGINT} é captado. O servidor, então, encerra sua execução de modo gracioso, fechando as conexões abertas. Isso permite que os clientes conectados instantaneamente percebam que a conexão foi fechada e, então, também encerrem sua execução com uma mensagem alertando que o servidor desconectou.
 
 \subsection{Estruturas e funções adicionais}
 
 \subsubsection{dropboxUtil}
 \begin{itemize}
 	\item void makedir\_if\_not\_exists(const char* path)
-	\newline Verifica se o diretório especificado no parâmetro 'path' existe e caso contrario o cria.
+	\newline Verifica se o diretório especificado no parâmetro \textit{path} existe e caso contrario o cria.
 	
 	\item int file\_exists(const char* path)
-	\newline Verifica se o diretório especificado no parâmetro 'path' existe.
+	\newline Verifica se o arquivo especificado no parâmetro \textit{path} existe.
 
 	\item int connect\_server(char* host, int port)
-	\newline Abre uma conexão via socket com o 'host'.
+	\newline Abre uma conexão via socket com o \textit{host}.
 \end{itemize}
 
 
 \subsubsection{dropboxServer}
 \begin{itemize}
 	\item struct file\_info
-	\newline Foram feitas duas mudanças na estrutura 'client', a primeira foi a remoção da propriedade 'char extension[MAXNAME]' para evitar duplicações ja que a extensão ja é facilmente recuperada através de 'char name[MAXNAME]'. A outra modificação foi o uso de uma estrutura 'time\_t' ao invés de um 'char *' para a propriedade 'last\_modified'.
+	\newline Foram feitas duas mudanças na estrutura \textit{client}. A primeira foi a remoção da propriedade \textit{char extension[MAXNAME]}, pois escolhemos armazenar o nome completo do arquivo em \textit{char name[MAXNAME]} e, então, não havia motivos para manter essa informação duplicada. A outra modificação foi o uso de uma estrutura 'time\_t' ao invés de um 'char *' para a propriedade 'last\_modified'.
 	
 	\item struct client
-	\newline Na estrutura 'client' foram adicionadas duas propriedades, a primeira é a 'int devices\_server[MAXDEVICES]' que armazena sockets 'servidor' do cliente (que recebe requisições de PUSH e DELETE), 'pthread\_mutex\_t mutex' foi adicionado e é o mutex que protege as seções críticas de cada cliente.
+	\newline Na estrutura \textit{client} foram adicionadas duas propriedades. A primeira é a \textit{int devices\_server[MAXDEVICES]} que armazena o socket \textit{servidor} do cliente (que recebe requisições de PUSH e DELETE). Além disso, foi adicionado o \textit{pthread\_mutex\_t mutex}, que é o mutex utilizado para proteger seções críticas de cada cliente, para evitar que sejam executadas simultaneamente em diferentes dispositivos.
 	
 	\item struct tailq\_entry
 	\newline Estrutura usada na lista de clientes.
 	
 	\item void delete\_file(char *file)
-	\newline Remove o arquivo file para do servidor. 'file' – filename.ext
+	\newline Remove o arquivo \textit{file} do servidor. 'file' – filename.ext
 	
 	\item void *connection\_handler(void *socket\_desc)
-	\newline Trata as conexões para cada cliente.
+	\newline Função executada pela thread que trata as conexões de cada cliente.
 
 \end{itemize}
 
@@ -141,33 +150,31 @@ A comunicação entre os clientes e o servidor é feita através de sockets TCP,
 	\newline Remove o arquivo file para do servidor. 'file' – filename.ext
 \end{itemize}
 
-\subsubsection{signal}
-Ao terminar o processo do servidor (usando CTRL+C, por exemplo), recebemos a notificação do signal enviado (SIGINT) e então realizamos a saída de modo 'gracefully'. Isso faz com que a conexão seja fechada na hora, e assim o cliente percebe e encerra também, com uma mensagem de erro "servidor desconectou, saindo...".
-
 \subsection{Testes}
+Para testar a aplicação cliente e servidor, utilizamos métodos não automatizados (manuais). Foram realizados testes das funções da especificação através da interface de linha de comando (CLI) da aplicação cliente e os resultados foram sendo verificados nos diretórios dos servidores e clientes.
+
+Um ponto importante e difícil de testar na prática foram as proteções de seções críticas. Para isso, tentou-se simular as condições de corrida de forma a realizar testes antes e depois da adição das variáreis de \textit{mutex} com o objetivo de comprovar a eficácia das mesmas.
 
 \section{Dificuldades encontradas}
 
 \subsection{Data de modificação incorreta}
-Ao receber arquivos, tanto no cliente como no serviro, às vezes a data de modificação estava sendo gravada incorreta.
-
-No caso do cliente, o problema estava no fato de que não havia uma exclusão mútua entre o salvamento da data de modificação e o daemon. Assim, quando o arquivo era fechado, o lock era liberado e o daemon prontamente captava e disparava se (PERA, TA ERRADO). A solução foi.
-
-Já no caso do servidor, a data já vinha errada do cliente. O que aconecia é que daemon capturava a modificação do arquivo assim que ele era fechado
-va a alteração assim q o arquivo era fechado, mas algumas vezes antes que o metadado de data de modificação fosse escrito. Esse caso ocorria quando colava algum aruqivo pelo filemanager. A solução foi colocar um pequeno sleep (de xxxx ms) para que o inotify espere.
-
-tanto no cliente como no servidorno cliente, ao receber um arquivo; no servidor, ao receber um novo arquivo do  no cliente; quando alterava algum arquivo no seu diretório de sincronização e era feito o upload.
-\subsection{Utilização de exlusões mútuas}
-colocar os mutex sem causar deadlock foi mais dificil q o esperado
+Ao receber arquivos, o servidor às vezes os gravava com a data de modificação incorreta. A origem do problema estava no cliente, que transmitia a data errada. Isso estava ocorrendo pois quando um arquivo no diretório de sincronização do usuário era alterado, o daemon prontamente capturava a alteração, muitas vezes antes que a data de modificação fosse definida para a data do arquivo original. Assim, a solução encontrada foi utilizar um \textit{sleep} para garantir que o daemon espere alguns milissegundos antes de tratar o evento.
 
 \subsection{Leitura de inteiros errados pelo socket}
-Alguns dados estavam chegando corrompidos. solucionamos definindo um tamanho fixo para as mensagens de method e também para os errose confirmacoes (ER, OK), pq senao acabava lendo algo do outro dado (so de vez em quando, nao sempre)
- 
-\subsection{Sincronização de alterações offline}
-Seria otimo que as alterações feitas durante o período em que o usuário esteve offline pudessem ser refletidas no servidor assim que ele se conectasse. Pensando nisso, fizemos com que o client salve um arquivo dropboxfiles no syncdir do usuario toda vez que é encerrado.
-Essa é uma lista com os nomes e data de modificação de cada arquivo. Assim, ao conectar novamente o cliente poderia comparar os arquivos que estão natualmente no diretorio de sincronização e a partir disso descobrir quais foram alterados, modificados e excluidos. COmeçamos a fazer isso, mas não implementamos de fato a parte de sincronização pois se mostrou um pouco mais complexa ter que fazer a comparação entre as duas lista de arquivo e as versẽs do servidor. nao fizemos por questao de tempo?
+Ao transmitir dados numéricos pelo socket, algumas vezes o valor chegava aparentemente corrompido. A saber, diversas vezes esse número era o tamanho do arquivo que seria lido em seguida, o que levava o receptor a ler menos caracteres que o esperado ou a ficar trancado esperando por caracteres que nunca chegariam. O problema estava na leitura feita anteriormente, que lia mais caracteres do que de fato a string enviada possuía. A solução encontrada, portanto, foi definir um tamanho fixo para essas mensagens, de modo que a leitura não recebesse bytes do dado numérico a ser lido em seguida.
 
-%\bibliographystyle{alpha}
-%\bibliography{sample}
+\subsection{Utilização de exclusões mútuas}
+A princípio, definir exclusões mútuas parecia simples, mas logo descobrimos que essa tarefa pode ser bastante complexa, pois exige pensar a fundo o comportamento de todas as threads simultaneamente, em suas diferentes possibilidades de intercalação. Foram várias as situações em que o programa chegava a uma situação de \textit{deadlock}.
+ 
+\subsection{Sincronização de alterações \textit{offline}}
+Seria ótimo que as alterações feitas durante o período em que o usuário esteve \textit{offline} pudessem ser refletidas no servidor assim que ele se conectasse. Na tentativa de implementar essa funcionalidade, fizemos com que o cliente automaticamente salve no seu diretório um arquivo \textit{.dropboxfiles} contendo nome e data de modificação de cada um de seus arquivos. 
+
+Assim, na próxima vez que ele se conectasse seria possível descobrir, comparando esse arquivo e os arquivos no diretório, quais alterações foram feitas no período de tempo que o usuário esteve desconectado. 
+No entanto, apesar de termos começado a implementação, não a concluímos por falta de tempo.
+
+\section{Conclusões}
+Ao terminar a implementação do trabalho, percebemos o quanto aprendemos com a construção do mesmo. Ao analisar a especificação vimos que teríamos que aprender diversas técnicas para construir a aplicação, como notificações do sistema de arquivos, comunicação utilizando sockets, proteções de seções críticas, barreiras, threads, e tudo isso utilizando uma linguagem de mais baixo nível. Mas construindo aos poucos, fomos estruturando nosso conhecimento e cada vez entendendo mais sobre o escopo envolvido.
+
+A oportunidade de poder colocar em prática os conhecimentos adquiridos na disciplina (e no restante do curso) em um trabalho com conceitos e funções bem atuais foi fantástica. Implementar em um trabalho funções similares a serviços/produtos populares (como o Dropbox) nos faz relacionar e visualizar os conceitos aprendidos com o que utilizamos no nosso dia-a-dia.
 
 \end{document}
