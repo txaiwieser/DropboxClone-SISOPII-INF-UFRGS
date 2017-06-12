@@ -494,6 +494,7 @@ void* local_server(void* unused) {
         if (read_size == 0) {
             printf("Server disconnected. Closing connection...");
             close_connection();
+            save_list_of_files();
             exit(0);
         }
     }
