@@ -374,7 +374,8 @@ void free_device() {
     struct tailq_entry *client_node;
     struct tailq_entry *tmp_client_node;
 
-    pthread_mutex_lock(&pClientEntry->mutex);
+    pthread_mutex_lock(&clientCreationLock);
+    // pthread_mutex_lock(&pClientEntry->mutex);
 
     for (client_node = TAILQ_FIRST(&clients_tailq_head); client_node != NULL; client_node = tmp_client_node) {
         if (strcmp(client_node->client_entry.userid, username) == 0) {
@@ -396,8 +397,9 @@ void free_device() {
         }
         tmp_client_node = TAILQ_NEXT(client_node, entries);
     }
-
-    pthread_mutex_unlock(&pClientEntry->mutex);
+    
+    pthread_mutex_unlock(&clientCreationLock);
+    // pthread_mutex_unlock(&pClientEntry->mutex);
 }
 
 // Handle connection for each client
