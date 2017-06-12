@@ -23,7 +23,7 @@
 
 char server_host[256], server_user[MAXNAME], user_sync_dir_path[256];
 int server_port = 0, sock = 0;
-uint16_t sync_files_left = MAXFILES; // number of files yet to sync
+uint16_t sync_files_left = MAXFILES, original_sync_files_left = MAXFILES;  // number of files yet to sync
 char *pIgnoredFileEntry; // Pointer to list of ignored files. It's used by inotify to prevent uploading a file that has just best downloaded.
 
 pthread_barrier_t syncbarrier;
@@ -62,7 +62,6 @@ void send_file(char *file) {
             if (strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) == 0) {
                 // Send file size to server
                 length_converted = htonl(st.st_size);
-                printf("send_file %s length=%ld length_converted=%ud\n", basename(file), st.st_size, length_converted);
                 write(sock, &length_converted, sizeof(length_converted));
 
                 // Read data from file and send it
@@ -271,7 +270,8 @@ void cmdGetSyncDir() {
     // Create user sync_dir if it doesn't exist and then sync files
     if(makedir_if_not_exists(user_sync_dir_path) == 0){
         sync_client();
-        pthread_barrier_wait(&syncbarrier); // wait for syncing all files
+        if (original_sync_files_left > 0)
+            pthread_barrier_wait(&syncbarrier); // wait for syncing all files
     }
 };
 
@@ -300,6 +300,7 @@ void sync_client() {
     // Receive number of files
     read(sock, &sync_files_left, sizeof(sync_files_left));
     sync_files_left = ntohs(sync_files_left);
+    original_sync_files_left = sync_files_left;
 
     /* TODO Sync modifications since last logout
 

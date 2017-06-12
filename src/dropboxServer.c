@@ -262,7 +262,6 @@ void send_file(char * file) {
 
             // Send file size to client
             length_converted = htonl(st.st_size);
-            printf("send_file length=%ld length_converted=%ud\n", st.st_size, length_converted);
             write(sock, &length_converted, sizeof(length_converted));
 
             // Read data from file and send it
