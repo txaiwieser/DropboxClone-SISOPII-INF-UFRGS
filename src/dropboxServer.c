@@ -13,12 +13,15 @@
 #include <pthread.h>
 #include <signal.h>
 #include <unistd.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxServer.h"
 
 __thread char username[MAXNAME], user_sync_dir_path[256];
 __thread int sock;
 __thread CLIENT_t *pClientEntry; // pointer to client struct in list of clients
+SSL *ssl; // TODO conferir se ta certo
 
 pthread_mutex_t clientCreationLock = PTHREAD_MUTEX_INITIALIZER; // prevent concurrent login
 
@@ -39,6 +42,7 @@ void graceful_exit(int signum) {
         }
     }
     printf("Exiting.\n");
+
     exit(0);
 }
 
@@ -46,11 +50,23 @@ int main(int argc, char * argv[]) {
     struct sockaddr_in address;
     int server_fd, new_socket, port, addrlen;
     struct sigaction action;
+    SSL_METHOD *method;
+    SSL_CTX *ctx;
 
     // Check number of parameters
     if (argc != 2) {
         printf("Usage: %s <port>\n", argv[0]);
         return 1;
+    }
+
+    // Initialize SSL
+    OpenSSL_add_all_algorithms();
+    SSL_load_error_strings();
+    method = TLS_server_method();
+    ctx = SSL_CTX_new(method);
+    if (ctx == NULL){
+      ERR_print_errors_fp(stderr);
+      abort();
     }
 
     port = atoi(argv[1]);
@@ -63,6 +79,10 @@ int main(int argc, char * argv[]) {
     memset(&action, 0, sizeof(struct sigaction));
     action.sa_handler = graceful_exit;
     sigaction(SIGINT, &action, NULL);
+
+    // Load SSL certificates
+    SSL_CTX_use_certificate_file(ctx, "CertFile.pem", SSL_FILETYPE_PEM);
+    SSL_CTX_use_PrivateKey_file(ctx, "KeyFile.pem", SSL_FILETYPE_PEM);
 
     // Creating socket file descriptor
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
@@ -89,6 +109,15 @@ int main(int argc, char * argv[]) {
     addrlen = sizeof(struct sockaddr_in);
     pthread_t thread_id;
     while ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen))) {
+        // Attach SSL
+        ssl = SSL_new(ctx);
+        SSL_set_fd(ssl, new_socket);
+
+        /* do SSL-protocol accept */
+        if ( SSL_accept(ssl) == -1 ){
+            ERR_print_errors_fp(stderr);
+        }
+
         puts("Connection accepted");
 
         if (pthread_create(&thread_id, NULL, connection_handler, (void *) &new_socket) < 0) {
@@ -103,6 +132,8 @@ int main(int argc, char * argv[]) {
         perror("accept failed");
         return 1;
     }
+
+    SSL_CTX_free(ctx); // release context // TODO is it called on graceful_exit? i guess no
 
     return 0;
 }
@@ -123,7 +154,7 @@ void sync_server() {
             nList ++;
     }
     nListConverted = htons(nList);
-    write(sock, &nListConverted, sizeof(nListConverted));
+    SSL_write(ssl, &nListConverted, sizeof(nListConverted));
 
     // Find current device
     for(d = 0; d < MAXDEVICES; d++ ) {
@@ -137,7 +168,7 @@ void sync_server() {
         if (pClientEntry->file_info[i].size != FREE_FILE_SIZE) {
             printf("[PUSH %s to %s's device %d]\n", pClientEntry->file_info[i].name, username, d);
             sprintf(method, "PUSH %s", pClientEntry->file_info[i].name);
-            write(pClientEntry->devices_server[d], method, sizeof(method));
+            write(pClientEntry->devices_server[d], method, sizeof(method)); // TODO use SSL_write
         }
     }
 
@@ -170,19 +201,19 @@ void receive_file(char *file) {
     sprintf(file_path, "%s/%s", user_sync_dir_path, file);
 
     // Receive file modification time
-    valread = read(sock, &client_file_time, sizeof(client_file_time));
+    valread = SSL_read(ssl, &client_file_time, sizeof(client_file_time));
 
     // If file already exists and server's version is newer, it's not transfered.
     if((file_found >= 0) && (client_file_time < pClientEntry->file_info[file_found].last_modified)) {
         printf("Client file is older than server version\n");
-        write(sock, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
+        SSL_write(ssl, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
         pthread_mutex_unlock(&pClientEntry->mutex);
         // Send server file to client
         for(i = 0; i < MAXDEVICES; i++ ) {
             if(pClientEntry->devices[i] == sock) {
                 printf("[PUSH %s to %s's device %d]\n", file, pClientEntry->userid, i);
                 sprintf(method, "PUSH %s", file);
-                write(pClientEntry->devices_server[i], method, sizeof(method));
+                write(pClientEntry->devices_server[i], method, sizeof(method)); // TODO USE SSL write
             }
         }
     } else {
@@ -191,19 +222,19 @@ void receive_file(char *file) {
         fp = fopen(file_path, "wb");
         if (NULL == fp) {
             printf("Error opening file");
-            write(sock, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
+            SSL_write(ssl, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
             pthread_mutex_unlock(&pClientEntry->mutex);
         } else {
             // Send "OK" to confirm file was created and is newer than the server version, so it should be transfered
-            write(sock, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
+            SSL_write(ssl, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
 
             // Receive file size
-            valread = read(sock, &file_size, sizeof(file_size));
+            valread = SSL_read(ssl, &file_size, sizeof(file_size));
             nLeft = ntohl(file_size);
             printf("sync_server: file_size=%ud nLeft_converted=%ud\n", file_size, nLeft);
 
             // Receive data in chunks
-            while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
+            while (nLeft > 0 && (valread = SSL_read(ssl, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
                 fwrite(buffer, 1, valread, fp);
                 nLeft -= valread;
             }
@@ -235,7 +266,7 @@ void receive_file(char *file) {
                 if(pClientEntry->devices[i] != INVALIDSOCKET && pClientEntry->devices[i] != sock) {
                     printf("[PUSH %s to %s's device %d]\n", file, pClientEntry->userid, i);
                     sprintf(method, "PUSH %s", file);
-                    write(pClientEntry->devices_server[i], method, sizeof(method));
+                    write(pClientEntry->devices_server[i], method, sizeof(method)); // TODO use ssl_write
                 }
             }
         }
@@ -255,14 +286,14 @@ void send_file(char * file) {
         FILE *fp = fopen(file_path,"rb");
         if (fp == NULL) {
             printf("File open error");
-            write(sock, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
+            SSL_write(ssl, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
         } else {
             // Send "OK" exists and was opened
-            write(sock, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
+            SSL_write(ssl, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
 
             // Send file size to client
             length_converted = htonl(st.st_size);
-            write(sock, &length_converted, sizeof(length_converted));
+            SSL_write(ssl, &length_converted, sizeof(length_converted));
 
             // Read data from file and send it
             while (1) {
@@ -272,7 +303,7 @@ void send_file(char * file) {
 
                 // If read was success, send data.
                 if (nread > 0) {
-                    write(sock, buff, nread);
+                    SSL_write(ssl, buff, nread);
                 }
 
                 // Either there was error, or reached end of file
@@ -289,10 +320,10 @@ void send_file(char * file) {
         fclose(fp);
 
         // Send file modification time
-        write(sock, &st.st_mtime, sizeof(st.st_mtime));
+        SSL_write(ssl, &st.st_mtime, sizeof(st.st_mtime));
     } else {
         printf("File doesn't exist!\n");
-        write(sock, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
+        SSL_write(ssl, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
     }
     pthread_mutex_unlock(&pClientEntry->mutex);
 }
@@ -333,7 +364,7 @@ void delete_file(char *file) {
             if(pClientEntry->devices[i] != INVALIDSOCKET && pClientEntry->devices[i] != sock) {
                 printf("[DELETE %s to %s's device %d]\n", file, pClientEntry->userid, i);
                 sprintf(method, "DELETE %s", file);
-                write(pClientEntry->devices_server[i], method, sizeof(method));
+                write(pClientEntry->devices_server[i], method, sizeof(method)); // TODO use SSL_WRITE
             }
         }
     } else {
@@ -357,13 +388,13 @@ void list_files() {
             nList += strlen(pClientEntry->file_info[i].name) + 1;
     }
     nListConverted = htonl(nList);
-    write(sock, &nListConverted, sizeof(nListConverted));
+    SSL_write(ssl, &nListConverted, sizeof(nListConverted));
 
     // Send filenames
     for (i = 0; i < MAXFILES; i++) {
         if (pClientEntry->file_info[i].size != FREE_FILE_SIZE) {
             sprintf(filename_string, "%s\n", pClientEntry->file_info[i].name);
-            write(sock, filename_string, strlen(filename_string));
+            SSL_write(ssl, filename_string, strlen(filename_string));
         }
     }
 
@@ -374,7 +405,7 @@ void free_device() {
     struct tailq_entry *client_node;
     struct tailq_entry *tmp_client_node;
 
-    pthread_mutex_lock(&clientCreationLock);
+    pthread_mutex_lock(&clientCreationLock); // TODO confirmar se resolveu
     // pthread_mutex_lock(&pClientEntry->mutex);
 
     for (client_node = TAILQ_FIRST(&clients_tailq_head); client_node != NULL; client_node = tmp_client_node) {
@@ -397,7 +428,7 @@ void free_device() {
         }
         tmp_client_node = TAILQ_NEXT(client_node, entries);
     }
-    
+
     pthread_mutex_unlock(&clientCreationLock);
     // pthread_mutex_unlock(&pClientEntry->mutex);
 }
@@ -421,7 +452,7 @@ void *connection_handler(void *socket_desc) {
     strcpy(client_ip, inet_ntoa(addr.sin_addr));
 
     // Receive username
-    read_size = recv(sock, username, sizeof(username), 0);
+    read_size = SSL_read(ssl, username, sizeof(username));
     username[read_size] = '\0';
 
     // Define path to user folder on server
@@ -498,10 +529,10 @@ void *connection_handler(void *socket_desc) {
     pthread_mutex_unlock(&clientCreationLock);
 
     // Send "OK" to confirm connection was accepted.
-    write(sock, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
+    SSL_write(ssl, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
 
     // Receive client's local server port
-    read_size = recv(sock, &client_server_port, sizeof(client_server_port), 0);
+    read_size = SSL_read(ssl, &client_server_port, sizeof(client_server_port));
     client_server_port = ntohs(client_server_port);
     debug_printf("Client's local server port: %d\n", client_server_port);
 
@@ -509,7 +540,7 @@ void *connection_handler(void *socket_desc) {
     client_node->client_entry.devices_server[device_to_use] = connect_server(client_ip, client_server_port);
 
     // Receive requests from client
-    while ((read_size = recv(sock, client_message, METHODSIZE, 0)) > 0 ) {
+    while ((read_size = SSL_read(ssl, client_message, METHODSIZE)) > 0 ) {
         // end of string marker
         client_message[read_size] = '\0';
 

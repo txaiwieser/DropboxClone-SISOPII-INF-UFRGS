@@ -18,6 +18,8 @@
 #include <math.h>
 #include <stdlib.h>
 #include <dirent.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 #include "../include/dropboxUtil.h"
 #include "../include/dropboxClient.h"
 
@@ -26,6 +28,7 @@ int server_port = 0, sock = 0;
 uint16_t sync_files_left = MAXFILES, original_sync_files_left = MAXFILES;  // number of files yet to sync
 char *pIgnoredFileEntry; // Pointer to list of ignored files. It's used by inotify to prevent uploading a file that has just best downloaded.
 int inotify_run = 0;
+SSL *ssl; // TODO conferir se ta certo
 
 pthread_barrier_t syncbarrier;
 pthread_barrier_t localserverbarrier;
@@ -52,18 +55,18 @@ void send_file(char *file) {
             sprintf(method, "UPLOAD %s", basename(file));
 
             // Call the server
-            write(sock, method, sizeof(method));
+            SSL_write(ssl, method, sizeof(method));
             debug_printf("[%s method sent]\n", method);
 
             // Send file modification time
-            write(sock, &st.st_mtime, sizeof(st.st_mtime));
+            SSL_write(ssl, &st.st_mtime, sizeof(st.st_mtime));
 
             // Detect if file was created and local version is newer than server version, so file must be transfered
-            valread = read(sock, buffer, TRANSMISSION_MSG_SIZE);
+            valread = SSL_read(ssl, buffer, TRANSMISSION_MSG_SIZE);
             if (strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) == 0) {
                 // Send file size to server
                 length_converted = htonl(st.st_size);
-                write(sock, &length_converted, sizeof(length_converted));
+                SSL_write(ssl, &length_converted, sizeof(length_converted));
 
                 // Read data from file and send it
                 while (1) {
@@ -73,7 +76,7 @@ void send_file(char *file) {
 
                     // If read was success, send data.
                     if (nread > 0) {
-                        write(sock, buff, nread);
+                        SSL_write(ssl, buff, nread);
                     }
 
                     // Either there was error, or reached end of file
@@ -116,11 +119,11 @@ void get_file(char *file, char *path) {
         sprintf(method, "DOWNLOAD %s", file);
 
         // Send to the server
-        write(sock, method, sizeof(method));
+        SSL_write(ssl, method, sizeof(method));
         debug_printf("[%s method sent]\n", method);
 
         // Detect if server accepted transmission
-        valread = read(sock, buffer, TRANSMISSION_MSG_SIZE);
+        valread = SSL_read(ssl, buffer, TRANSMISSION_MSG_SIZE);
         if (strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) == 0) {
           // Create file where data will be stored
           FILE *fp;
@@ -129,10 +132,10 @@ void get_file(char *file, char *path) {
               printf("Error opening file");
           } else {
               // Receive file size
-              valread = read(sock, &nLeft, sizeof(nLeft));
+              valread = SSL_read(ssl, &nLeft, sizeof(nLeft));
               nLeft = ntohl(nLeft);
               // Receive data in chunks
-              while (nLeft > 0 && (valread = read(sock, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
+              while (nLeft > 0 && (valread = SSL_read(ssl, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
                   fwrite(buffer, 1, valread, fp);
                   nLeft -= valread;
               }
@@ -144,7 +147,7 @@ void get_file(char *file, char *path) {
           fclose (fp);
 
           // Set modtime to original file modtime
-          valread = read(sock, &original_file_time, sizeof(time_t));
+          valread = SSL_read(ssl, &original_file_time, sizeof(time_t));
           new_times.modtime = original_file_time; // set mtime to original file time
           new_times.actime = time(NULL); // set atime to current time
           utime(file_path, &new_times);
@@ -176,7 +179,7 @@ void delete_server_file(char *file) {
     sprintf(method, "DELETE %s", file);
 
     // Send to the server
-    write(sock, method, sizeof(method));
+    SSL_write(ssl, method, sizeof(method));
     debug_printf("[%s method sent]\n", method);
 };
 
@@ -253,14 +256,14 @@ void cmdList() {
     uint32_t nLeft;
     char buffer[1024] = {0};
 
-    write(sock, "LIST", METHODSIZE);
+    SSL_write(ssl, "LIST", METHODSIZE);
 
     // Receive length
-    read(sock, &nLeft, sizeof(nLeft));
+    SSL_read(ssl, &nLeft, sizeof(nLeft));
     nLeft = ntohl(nLeft);
 
     // Receive data in chunks
-    while (nLeft > 0 && (valread = read(sock, buffer, sizeof(buffer))) > 0) {
+    while (nLeft > 0 && (valread = SSL_read(ssl, buffer, sizeof(buffer))) > 0) {
         buffer[valread] = '\0';
         printf("%s", buffer);
         nLeft -= valread;
@@ -289,10 +292,10 @@ void sync_client() {
     pthread_mutex_lock(&fileOperationMutex);
     debug_printf("[Syncing...]\n");
 
-    write(sock, "SYNC", METHODSIZE);
+    SSL_write(ssl, "SYNC", METHODSIZE);
 
     // Receive number of files
-    read(sock, &sync_files_left, sizeof(sync_files_left));
+    SSL_read(ssl, &sync_files_left, sizeof(sync_files_left));
     sync_files_left = ntohs(sync_files_left);
     original_sync_files_left = sync_files_left;
 
@@ -439,7 +442,7 @@ void cmdGetSyncDir() {
     } else if(inotify_run == 0){
         // Create inotify thread for monitoring file changes
 		if (pthread_create(&thread_id, NULL, sync_daemon, NULL) < 0) {
-		    perror("could not create inotify thread");	
+		    perror("could not create inotify thread");
 		}
 		inotify_run=1;
     }
@@ -480,16 +483,16 @@ void* local_server(void* unused) {
 
     // Send local_server port to the server
     port_converted = address.sin_port;
-    write(sock, &port_converted, sizeof(port_converted));
+    SSL_write(ssl, &port_converted, sizeof(port_converted));
 
     // Accept and incoming connection
     addrlen = sizeof(struct sockaddr_in);
     while ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen))) {
-
+        // TODO SSL for new_socket?
         pthread_barrier_wait(&localserverbarrier);
 
         // Receive a message from server
-        while ((read_size = recv(new_socket, server_message, METHODSIZE, 0)) > 0 ) {
+        while ((read_size = read(new_socket, server_message, METHODSIZE)) > 0 ) {
             // end of string marker
             server_message[read_size] = '\0';
 
@@ -549,6 +552,26 @@ void copy_file(char *file1, char *file2){
     }
 }
 
+void ShowCerts(SSL* ssl)
+{   X509 *cert;
+    char *line;
+
+    cert = SSL_get_peer_certificate(ssl); /* get the server's certificate */
+    if ( cert != NULL )
+    {
+        printf("Server certificates:\n");
+        line = X509_NAME_oneline(X509_get_subject_name(cert), 0, 0);
+        printf("Subject: %s\n", line);
+        free(line);       /* free the malloc'ed string */
+        line = X509_NAME_oneline(X509_get_issuer_name(cert), 0, 0);
+        printf("Issuer: %s\n", line);
+        free(line);       /* free the malloc'ed string */
+        X509_free(cert);     /* free the malloc'ed certificate copy */
+    }
+    else
+        printf("Info: No client certificates configured.\n");
+}
+
 int main(int argc, char * argv[]) {
     char cmd[256];
     char filename[256];
@@ -556,11 +579,23 @@ int main(int argc, char * argv[]) {
     char * token;
     int valread;
     pthread_t thread_id;
+    SSL_METHOD *method;
+    SSL_CTX *ctx;
 
     // Check number of parameters
     if (argc < 4) {
         printf("Usage: %s <user> <IP> <port>\n", argv[0]);
         return 1;
+    }
+
+    // Initialize SSL
+    OpenSSL_add_all_algorithms();
+    SSL_load_error_strings();
+    method = TLS_client_method();
+    ctx = SSL_CTX_new(method);
+    if (ctx == NULL){
+      ERR_print_errors_fp(stderr);
+      abort();
     }
 
     // Connect to server
@@ -572,6 +607,16 @@ int main(int argc, char * argv[]) {
     if (sock < 0) {
         return -1;
     }
+    // Attach SSL
+    ssl = SSL_new(ctx);
+    SSL_set_fd(ssl, sock);
+    printf("xxx\n");
+    if (SSL_connect(ssl) == -1){
+        printf("SSL connection refused\n");
+        ERR_print_errors_fp(stderr);
+        return -1;
+    }
+    ShowCerts(ssl);
 
     // Initialize the tail queue
     TAILQ_INIT(&ignoredfiles_tailq_head);
@@ -583,10 +628,9 @@ int main(int argc, char * argv[]) {
     pthread_barrier_init(&localserverbarrier, NULL, 2);
 
     // Send username to server
-    write(sock, server_user, strlen(server_user));
-
+    SSL_write(ssl, server_user, strlen(server_user));
     // Detect if connection was closed
-    valread = read(sock, buffer, sizeof(buffer));
+    valread = SSL_read(ssl, buffer, sizeof(buffer));
     if (valread == 0) {
         printf("%s is already connected in two devices. Closing connection...\n", server_user);
         return 0;
@@ -639,10 +683,14 @@ int main(int argc, char * argv[]) {
             else printf("Invalid command! Type 'help' to see the available commands\n");
         }
     }
+
+    SSL_CTX_free(ctx); // release context  TODO is it called on close_connection? i guess no
+
     return 0;
 }
 
 void close_connection() {
     // Stop both reception and transmission.
     shutdown(sock, 2);
+    SSL_free(ssl);
 }

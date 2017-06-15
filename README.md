@@ -3,6 +3,18 @@
 2. Inicie o servidor: ```./bin/dropboxServer 3003```
 3. Inicie o cliente: ```./bin/dropboxClient usuario 127.0.0.1 3003```
 
+## Etapa 2
+- [ ] Sincronização de relógio
+- [x] SSL: cliente-servidor
+- [ ] SSL: localserver
+- [ ] Replicação
+
+
+## Anotações para relatório etapa 2
+- usamos TLS1.2
+
+-------------------------------
+
 ## Alta prioridade
 - [ ] Os arquivos devem ser sincronizados toda vez que o cliente conecta ou não? Seria uma boa pelo menos baixar os do servidor que estão com timestamp diferente...
 
