@@ -21,7 +21,7 @@
 __thread char username[MAXNAME], user_sync_dir_path[256];
 __thread int sock;
 __thread CLIENT_t *pClientEntry; // pointer to client struct in list of clients
-SSL *ssl, *ssl_cls; // TODO conferir se ta certo
+SSL *ssl, *ssl_cls; // TODO conferir se ta certo. Não deveria ser exclusivo da thread? pq aí caso tenha mais de um usuario ao mesmo tempo pode acabar confundindo os sockets...?
 const SSL_METHOD *method;
 SSL_CTX *ctx;
 
@@ -168,7 +168,7 @@ void sync_server() {
         if (pClientEntry->file_info[i].size != FREE_FILE_SIZE) {
             printf("[PUSH %s to %s's device %d]\n", pClientEntry->file_info[i].name, username, d);
             sprintf(method, "PUSH %s", pClientEntry->file_info[i].name);
-            SSL_write(pClientEntry->devices_server[d], method, sizeof(method)); // TODO use SSL_write
+            SSL_write(pClientEntry->devices_server[d], method, sizeof(method));
         }
     }
 
@@ -266,7 +266,7 @@ void receive_file(char *file) {
                 if(pClientEntry->devices[i] != NULL && pClientEntry->devices[i] != ssl) {
                     printf("[PUSH %s to %s's device %d]\n", file, pClientEntry->userid, i);
                     sprintf(method, "PUSH %s", file);
-                    SSL_write(pClientEntry->devices_server[i], method, sizeof(method)); // TODO use ssl_write
+                    SSL_write(pClientEntry->devices_server[i], method, sizeof(method));
                 }
             }
         }
@@ -364,7 +364,7 @@ void delete_file(char *file) {
             if(pClientEntry->devices[i] != NULL && pClientEntry->devices[i] != ssl) {
                 printf("[DELETE %s to %s's device %d]\n", file, pClientEntry->userid, i);
                 sprintf(method, "DELETE %s", file);
-                SSL_write(pClientEntry->devices_server[i], method, sizeof(method)); // TODO use SSL_WRITE
+                SSL_write(pClientEntry->devices_server[i], method, sizeof(method));
             }
         }
     } else {

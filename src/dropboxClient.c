@@ -33,12 +33,44 @@ SSL_CTX *ctx;
 const SSL_METHOD *method;
 
 pthread_barrier_t syncbarrier;
-pthread_barrier_t localserverbarrier;
+pthread_barrier_t serverlistenerbarrier;
 
 pthread_mutex_t fileOperationMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t inotifyMutex = PTHREAD_MUTEX_INITIALIZER;
 
 TAILQ_HEAD(, tailq_entry) ignoredfiles_tailq_head;
+
+
+int connect_server(char * host, int port) {
+    int sock = 0;
+    struct sockaddr_in serv_addr;
+    struct hostent *server;
+
+    server = gethostbyname(host);
+    if (server == NULL) {
+        printf("ERROR, no such host\n");
+        return -1;
+    }
+
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printf("\n Socket creation error \n");
+        return -1;
+    }
+
+    memset(&serv_addr, '0', sizeof(serv_addr));
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
+    serv_addr.sin_addr = *((struct in_addr *) server->h_addr);
+    bzero(&(serv_addr.sin_zero), 8);
+
+    if (connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
+        printf("\nConnection Failed. \n");
+        return -1;
+    }
+
+    return sock;
+}
 
 void send_file(char *file) {
     struct stat st;
@@ -258,25 +290,19 @@ void cmdList() {
     uint32_t nLeft;
     char buffer[1024] = {0};
 
-    printf("list a\n");
     SSL_write(ssl, "LIST", METHODSIZE);
-    printf("list b\n");
 
     // Receive length
     SSL_read(ssl, &nLeft, sizeof(nLeft));
     nLeft = ntohl(nLeft);
-    printf("list c nLeft=%d\n", nLeft);
 
-    // Receive data in chunks
+    // Receive list of files in chunks
     while (nLeft > 0 && (valread = SSL_read(ssl, buffer, sizeof(buffer))) > 0) {
         buffer[valread] = '\0';
         printf("%s", buffer);
         nLeft -= valread;
     }
-    printf("list acabou de ler\n");
 };
-
-
 
 void cmdMan() {
     printf("\nAvailable commands:\n");
@@ -454,37 +480,32 @@ void cmdGetSyncDir() {
     }
 };
 
-// A local server, to handle requests from server // TODO renomear
-void* local_server(void* unused) {
-    int new_socket, read_size;
+// Listen to server calls (PUSH, DELETE, ...)
+void* server_listener(void* unused) {
+    int sock_cls, read_size;
     uint16_t client_server_port;
     char server_message[METHODSIZE];
 
-    // TODO local_server pode acabar executando antes da outra thread? barreira? mutex em algo feito?
-    sleep(2);
-
-    // Receive client's local server port
+    // Receive server port for new socket
     read_size = SSL_read(ssl, &client_server_port, sizeof(client_server_port));
     client_server_port = ntohs(client_server_port);
-    debug_printf("Server port: %d\n", client_server_port);
 
     // Connect and attach SSL
-    new_socket = connect_server(server_host, client_server_port);
+    sock_cls = connect_server(server_host, client_server_port);
     ssl_cls = SSL_new(ctx);
-    SSL_set_fd(ssl_cls, new_socket);
+    SSL_set_fd(ssl_cls, sock_cls);
     if (SSL_connect(ssl_cls) == -1){
         printf("SSL connection refused\n");
         ERR_print_errors_fp(stderr);
         return -1;
     }
 
-    printf("xxx");
+    pthread_barrier_wait(&serverlistenerbarrier);
 
     // Receive a message from server
     while ((read_size = SSL_read(ssl_cls, server_message, METHODSIZE)) > 0 ) {
         // end of string marker
         server_message[read_size] = '\0';
-        printf("yyy");
 
         if (!strncmp(server_message, "PUSH", 4)) {
             debug_printf("[received PUSH from server]\n");
@@ -501,8 +522,6 @@ void* local_server(void* unused) {
         }
     }
 
-    printf("zzz");
-
     if (read_size == 0) {
         printf("Server disconnected. Closing connection...");
         close_connection();
@@ -512,8 +531,7 @@ void* local_server(void* unused) {
         perror("recv failed");
     }
 
-    printf("quitting localserver thread");
-    //exit(0); TODO colocar de volta?
+    exit(0);
 }
 
 void copy_file(char *file1, char *file2){
@@ -615,7 +633,7 @@ int main(int argc, char * argv[]) {
     sprintf(user_sync_dir_path, "%s/sync_dir_%s", getenv("HOME"), server_user);
 
     pthread_barrier_init(&syncbarrier, NULL, 2);
-    pthread_barrier_init(&localserverbarrier, NULL, 2);
+    pthread_barrier_init(&serverlistenerbarrier, NULL, 2);
 
     // Send username to server
     SSL_write(ssl, server_user, strlen(server_user));
@@ -628,15 +646,15 @@ int main(int argc, char * argv[]) {
 
     debug_printf("[Connection established]\n");
 
-    // Create thread for local_server
-    if (pthread_create(&thread_id, NULL, local_server, NULL) < 0) {
-        perror("could not create local_server thread");
+    // Create thread for server_listener
+    if (pthread_create(&thread_id, NULL, server_listener, NULL) < 0) {
+        perror("could not create server_listener thread");
         return 1;
     }
 
     // Create user sync_dir and sync files
     printf("Syncing...");
-    //pthread_barrier_wait(&localserverbarrier); // wait for local_server connection
+    pthread_barrier_wait(&serverlistenerbarrier); // wait for server_listener connection
     cmdGetSyncDir();
     printf("Done.\n\n");
 
@@ -648,7 +666,6 @@ int main(int argc, char * argv[]) {
         printf("Dropbox> ");
         // TODO Ajustar se usuário tecla enter sem inserir nada antes
         scanf("%s", cmd);
-        printf("entrou: %s\n",cmd);
         if ((token = strtok(cmd, " \t")) != NULL) {
             if (strcmp(token, "exit") == 0) {
                 cmdExit();

@@ -8,10 +8,15 @@
 - [x] SSL
 - [ ] Replicação
 
+## Outros
+- [ ] TODOs no código
+- [ ] Alguns itens que estão ali embaixo? 
+
 
 ## Anotações para relatório etapa 2
 - usamos TLS1.2
-- Tiramos o localserver do cliente, e o colocamos em uma thread separada no servidor, assim podemos usar ssl (sem comprometer a chave ou precisra q os clientes tenham uma chave, o q nao faria sentido).
+- Tiramos o localserver do cliente, e o colocamos em uma thread separada no servidor, assim podemos usar ssl (sem comprometer a chave ou precisra q os clientes tenham uma chave, o q nao faria sentido). Mudamos o armazenamento dos sockets no struct do servidor para o tipo SSL, em vez de int.
+- Movemos funcao "connect_server()" do util pro cliente, já q só ele usa essa funcao agora
 
 -------------------------------
 
