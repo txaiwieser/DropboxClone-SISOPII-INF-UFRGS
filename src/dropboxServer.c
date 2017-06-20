@@ -21,7 +21,7 @@
 __thread char username[MAXNAME], user_sync_dir_path[256];
 __thread int sock;
 __thread CLIENT_t *pClientEntry; // pointer to client struct in list of clients
-SSL *ssl; // TODO conferir se ta certo
+SSL *ssl, *ssl_cls; // TODO conferir se ta certo
 
 pthread_mutex_t clientCreationLock = PTHREAD_MUTEX_INITIALIZER; // prevent concurrent login
 
@@ -531,13 +531,59 @@ void *connection_handler(void *socket_desc) {
     // Send "OK" to confirm connection was accepted.
     SSL_write(ssl, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
 
-    // Receive client's local server port
-    read_size = SSL_read(ssl, &client_server_port, sizeof(client_server_port));
-    client_server_port = ntohs(client_server_port);
-    debug_printf("Client's local server port: %d\n", client_server_port);
+    // Criar socket
+    int server_fd_cls, new_socket_cls;
+    struct sockaddr_in address_cls;
+    uint16_t port_converted;
+    char server_message[METHODSIZE];
+
+    // Creating socket file descriptor
+    if ((server_fd_cls = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    address_cls.sin_family = AF_INET;
+    address_cls.sin_addr.s_addr = INADDR_ANY;
+    address_cls.sin_port = 0; // auto assign port
+
+    // Attach socket to the port
+    if (bind(server_fd_cls, (struct sockaddr *) &address_cls, sizeof(address_cls)) < 0) {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+    }
+    if (listen(server_fd_cls, 3) < 0) {
+        perror("listen");
+        exit(EXIT_FAILURE);
+    }
+
+    socklen_t len = sizeof(address_cls);
+    if (getsockname(server_fd_cls, (struct sockaddr *)&address_cls, &len_cls) == -1) {
+        perror("getsockname");
+        exit(EXIT_FAILURE);
+    }
+
+    // Send port to the client
+    port_converted = address_cls.sin_port;
+    SSL_write(ssl, &port_converted, sizeof(port_converted));
+
+    // Accept and incoming connection
+    addrlen = sizeof(struct sockaddr_in);
+    while ((new_socket_cls = accept(server_fd_cls, (struct sockaddr *) &address_cls, (socklen_t *) &addrlen_cls))) {
+        debug_printf("ACEITOU CONEXAO\n");
+
+        // Attach SSL
+        ssl_cls = SSL_new(ctx);
+        SSL_set_fd(ssl_cls, new_socket);
+
+        /* do SSL-protocol accept */
+        if ( SSL_accept(ssl_cls) == -1 ){
+            ERR_print_errors_fp(stderr);
+        }
+    }
 
     // Connect to client's server
-    client_node->client_entry.devices_server[device_to_use] = connect_server(client_ip, client_server_port);
+    client_node->client_entry.devices_server[device_to_use] =
 
     // Receive requests from client
     while ((read_size = SSL_read(ssl, client_message, METHODSIZE)) > 0 ) {

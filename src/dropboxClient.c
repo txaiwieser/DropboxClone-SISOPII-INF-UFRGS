@@ -28,7 +28,9 @@ int server_port = 0, sock = 0;
 uint16_t sync_files_left = MAXFILES, original_sync_files_left = MAXFILES;  // number of files yet to sync
 char *pIgnoredFileEntry; // Pointer to list of ignored files. It's used by inotify to prevent uploading a file that has just best downloaded.
 int inotify_run = 0;
-SSL *ssl; // TODO conferir se ta certo
+SSL *ssl, *ssl_cls; // TODO conferir se ta certo
+SSL_CTX *ctx;
+SSL_METHOD *method;
 
 pthread_barrier_t syncbarrier;
 pthread_barrier_t localserverbarrier;
@@ -448,77 +450,48 @@ void cmdGetSyncDir() {
     }
 };
 
-// A local server, to handle requests from server
+// A local server, to handle requests from server // TODO renomear
 void* local_server(void* unused) {
-    int server_fd, new_socket, read_size, addrlen;
-    struct sockaddr_in address;
+    int new_socket, read_size;
+    uint16_t client_server_port;
     uint16_t port_converted;
-    char server_message[METHODSIZE];
+    char server_message[METHODSIZE], client_ip[20];
 
-    // Creating socket file descriptor
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
-        perror("socket failed");
-        exit(EXIT_FAILURE);
-    }
+    // TODO local_server pode acabar executando antes da outra thread?
 
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = 0; // auto assign port
+    // Receive client's local server port
+    read_size = SSL_read(ssl, &client_server_port, sizeof(client_server_port));
+    client_server_port = ntohs(client_server_port);
+    debug_printf("Server port: %d\n", client_server_port);
 
-    // Attach socket to the port
-    if (bind(server_fd, (struct sockaddr *) &address, sizeof(address)) < 0) {
-        perror("bind failed");
-        exit(EXIT_FAILURE);
-    }
-    if (listen(server_fd, 3) < 0) {
-        perror("listen");
-        exit(EXIT_FAILURE);
-    }
+    new_socket = connect_server(client_ip, client_server_port);
+    ssl_cls = SSL_new(ctx);
+    SSL_set_fd(ssl_cls, new_socket);
 
-    socklen_t len = sizeof(address);
-    if (getsockname(server_fd, (struct sockaddr *)&address, &len) == -1) {
-        perror("getsockname");
-        exit(EXIT_FAILURE);
-    }
+    // Receive a message from server
+    while ((read_size = SSL_read(ssl_cls, server_message, METHODSIZE)) > 0 ) {
+        // end of string marker
+        server_message[read_size] = '\0';
 
-    // Send local_server port to the server
-    port_converted = address.sin_port;
-    SSL_write(ssl, &port_converted, sizeof(port_converted));
-
-    // Accept and incoming connection
-    addrlen = sizeof(struct sockaddr_in);
-    while ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen))) {
-        // TODO SSL for new_socket?
-        pthread_barrier_wait(&localserverbarrier);
-
-        // Receive a message from server
-        while ((read_size = read(new_socket, server_message, METHODSIZE)) > 0 ) {
-            // end of string marker
-            server_message[read_size] = '\0';
-
-            if (!strncmp(server_message, "PUSH", 4)) {
-                debug_printf("[received PUSH from server]\n");
-                get_file(server_message + 5, user_sync_dir_path);
-                if (sync_files_left > 1){
-                    sync_files_left--;
-                } else if(sync_files_left == 1  && original_sync_files_left >= 1){
-                    pthread_barrier_wait(&syncbarrier);
-		    sync_files_left--;
-                }
-            } else if (!strncmp(server_message, "DELETE", 6)) {
-                debug_printf("[received DELETE from server]\n");
-                delete_local_file(server_message + 7);
+        if (!strncmp(server_message, "PUSH", 4)) {
+            debug_printf("[received PUSH from server]\n");
+            get_file(server_message + 5, user_sync_dir_path);
+            if (sync_files_left > 1){
+                sync_files_left--;
+            } else if(sync_files_left == 1  && original_sync_files_left >= 1){
+                //pthread_barrier_wait(&syncbarrier);
+    sync_files_left--;
             }
-        }
-        if (read_size == 0) {
-            printf("Server disconnected. Closing connection...");
-            close_connection();
-            save_list_of_files();
-            exit(0);
+        } else if (!strncmp(server_message, "DELETE", 6)) {
+            debug_printf("[received DELETE from server]\n");
+            delete_local_file(server_message + 7);
         }
     }
-    if (new_socket < 0) {
-        perror("accept failed");
+    if (read_size == 0) {
+        printf("Server disconnected. Closing connection...");
+        close_connection();
+        save_list_of_files();
+        exit(0);
     }
 
     exit(0);
@@ -579,8 +552,6 @@ int main(int argc, char * argv[]) {
     char * token;
     int valread;
     pthread_t thread_id;
-    SSL_METHOD *method;
-    SSL_CTX *ctx;
 
     // Check number of parameters
     if (argc < 4) {
@@ -646,7 +617,7 @@ int main(int argc, char * argv[]) {
 
     // Create user sync_dir and sync files
     printf("Syncing...");
-    pthread_barrier_wait(&localserverbarrier); // wait for local_server connection
+    //pthread_barrier_wait(&localserverbarrier); // wait for local_server connection
     cmdGetSyncDir();
     printf("Done.\n\n");
 
