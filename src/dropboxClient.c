@@ -30,7 +30,7 @@ char *pIgnoredFileEntry; // Pointer to list of ignored files. It's used by inoti
 int inotify_run = 0;
 SSL *ssl, *ssl_cls; // TODO conferir se ta certo
 SSL_CTX *ctx;
-SSL_METHOD *method;
+const SSL_METHOD *method;
 
 pthread_barrier_t syncbarrier;
 pthread_barrier_t localserverbarrier;
@@ -258,11 +258,14 @@ void cmdList() {
     uint32_t nLeft;
     char buffer[1024] = {0};
 
+    printf("list a\n");
     SSL_write(ssl, "LIST", METHODSIZE);
+    printf("list b\n");
 
     // Receive length
     SSL_read(ssl, &nLeft, sizeof(nLeft));
     nLeft = ntohl(nLeft);
+    printf("list c nLeft=%d\n", nLeft);
 
     // Receive data in chunks
     while (nLeft > 0 && (valread = SSL_read(ssl, buffer, sizeof(buffer))) > 0) {
@@ -270,6 +273,7 @@ void cmdList() {
         printf("%s", buffer);
         nLeft -= valread;
     }
+    printf("list acabou de ler\n");
 };
 
 
@@ -454,24 +458,33 @@ void cmdGetSyncDir() {
 void* local_server(void* unused) {
     int new_socket, read_size;
     uint16_t client_server_port;
-    uint16_t port_converted;
-    char server_message[METHODSIZE], client_ip[20];
+    char server_message[METHODSIZE];
 
-    // TODO local_server pode acabar executando antes da outra thread?
+    // TODO local_server pode acabar executando antes da outra thread? barreira? mutex em algo feito?
+    sleep(2);
 
     // Receive client's local server port
     read_size = SSL_read(ssl, &client_server_port, sizeof(client_server_port));
     client_server_port = ntohs(client_server_port);
     debug_printf("Server port: %d\n", client_server_port);
 
-    new_socket = connect_server(client_ip, client_server_port);
+    // Connect and attach SSL
+    new_socket = connect_server(server_host, client_server_port);
     ssl_cls = SSL_new(ctx);
     SSL_set_fd(ssl_cls, new_socket);
+    if (SSL_connect(ssl_cls) == -1){
+        printf("SSL connection refused\n");
+        ERR_print_errors_fp(stderr);
+        return -1;
+    }
+
+    printf("xxx");
 
     // Receive a message from server
     while ((read_size = SSL_read(ssl_cls, server_message, METHODSIZE)) > 0 ) {
         // end of string marker
         server_message[read_size] = '\0';
+        printf("yyy");
 
         if (!strncmp(server_message, "PUSH", 4)) {
             debug_printf("[received PUSH from server]\n");
@@ -479,22 +492,28 @@ void* local_server(void* unused) {
             if (sync_files_left > 1){
                 sync_files_left--;
             } else if(sync_files_left == 1  && original_sync_files_left >= 1){
-                //pthread_barrier_wait(&syncbarrier);
-    sync_files_left--;
+                pthread_barrier_wait(&syncbarrier);
+                sync_files_left--;
             }
         } else if (!strncmp(server_message, "DELETE", 6)) {
             debug_printf("[received DELETE from server]\n");
             delete_local_file(server_message + 7);
         }
     }
+
+    printf("zzz");
+
     if (read_size == 0) {
         printf("Server disconnected. Closing connection...");
         close_connection();
         save_list_of_files();
         exit(0);
+    } else if (read_size == -1) {
+        perror("recv failed");
     }
 
-    exit(0);
+    printf("quitting localserver thread");
+    //exit(0); TODO colocar de volta?
 }
 
 void copy_file(char *file1, char *file2){
@@ -581,7 +600,7 @@ int main(int argc, char * argv[]) {
     // Attach SSL
     ssl = SSL_new(ctx);
     SSL_set_fd(ssl, sock);
-    printf("xxx\n");
+    printf("aaa\n");
     if (SSL_connect(ssl) == -1){
         printf("SSL connection refused\n");
         ERR_print_errors_fp(stderr);
@@ -601,8 +620,8 @@ int main(int argc, char * argv[]) {
     // Send username to server
     SSL_write(ssl, server_user, strlen(server_user));
     // Detect if connection was closed
-    valread = SSL_read(ssl, buffer, sizeof(buffer));
-    if (valread == 0) {
+    valread = SSL_read(ssl, buffer, TRANSMISSION_MSG_SIZE);
+    if (valread == 0 || strcmp(buffer, TRANSMISSION_CONFIRM) != 0) {
         printf("%s is already connected in two devices. Closing connection...\n", server_user);
         return 0;
     }
@@ -629,6 +648,7 @@ int main(int argc, char * argv[]) {
         printf("Dropbox> ");
         // TODO Ajustar se usuário tecla enter sem inserir nada antes
         scanf("%s", cmd);
+        printf("entrou: %s\n",cmd);
         if ((token = strtok(cmd, " \t")) != NULL) {
             if (strcmp(token, "exit") == 0) {
                 cmdExit();

@@ -2,7 +2,6 @@
 #define MAXNAME 255 // Maximum filename length
 #define MAXFILES 200 // Maximum number of files in user dir
 #define METHODSIZE 255 // Method messages (DOWNLOAD filename, UPLOAD filename, PUSH filename, etc) length
-#define INVALIDSOCKET -1
 
 // Both constants must have TRANSMISSION_MSG_SIZE characteres!
 #define TRANSMISSION_CONFIRM "OK"

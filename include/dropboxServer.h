@@ -12,8 +12,8 @@ typedef struct file_info {
 
 typedef struct client {
   pthread_mutex_t mutex; // user mutex
-  int devices[MAXDEVICES]; // associado aos dispositivos do usuário
-  int devices_server[MAXDEVICES]; // socket 'servidor' do cliente, que recebe requisições de PUSH e DELETE
+  SSL *devices[MAXDEVICES]; // associado aos dispositivos do usuário
+  SSL *devices_server[MAXDEVICES]; // socket 'servidor' do cliente, que recebe requisições de PUSH e DELETE
   char userid[MAXNAME]; // id do usuário no servidor, que deverá ser único. Informado pela linha de comando.
   FILE_INFO_t file_info[MAXFILES];  // metadados de cada arquivo que o cliente possui no servidor
   int logged_in;  // cliente está logado ou não

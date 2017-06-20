@@ -46,6 +46,7 @@ int file_exists(const char* path) {
     return stat_result;
 }
 
+// TODO move to server
 int connect_server(char * host, int port) {
     int sock = 0;
     struct sockaddr_in serv_addr;

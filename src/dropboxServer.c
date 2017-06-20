@@ -22,6 +22,8 @@ __thread char username[MAXNAME], user_sync_dir_path[256];
 __thread int sock;
 __thread CLIENT_t *pClientEntry; // pointer to client struct in list of clients
 SSL *ssl, *ssl_cls; // TODO conferir se ta certo
+const SSL_METHOD *method;
+SSL_CTX *ctx;
 
 pthread_mutex_t clientCreationLock = PTHREAD_MUTEX_INITIALIZER; // prevent concurrent login
 
@@ -35,9 +37,9 @@ void graceful_exit(int signum) {
     printf("\nClosing all connections...\n");
     TAILQ_FOREACH(client_node, &clients_tailq_head, entries) {
         for(i = 0; i < MAXDEVICES; i++ ) {
-            if(client_node->client_entry.devices[i] != INVALIDSOCKET && client_node->client_entry.devices[i] != sock) {
-                shutdown(client_node->client_entry.devices[i], 2);
-                shutdown(client_node->client_entry.devices_server[i], 2);
+            if(client_node->client_entry.devices[i] != NULL && client_node->client_entry.devices[i] != ssl) {
+                SSL_shutdown(client_node->client_entry.devices[i]);
+                SSL_shutdown(client_node->client_entry.devices_server[i]);
             }
         }
     }
@@ -50,8 +52,6 @@ int main(int argc, char * argv[]) {
     struct sockaddr_in address;
     int server_fd, new_socket, port, addrlen;
     struct sigaction action;
-    SSL_METHOD *method;
-    SSL_CTX *ctx;
 
     // Check number of parameters
     if (argc != 2) {
@@ -158,7 +158,7 @@ void sync_server() {
 
     // Find current device
     for(d = 0; d < MAXDEVICES; d++ ) {
-        if(pClientEntry->devices[d] == sock) {
+        if(pClientEntry->devices[d] == ssl) {
             break;
         }
     }
@@ -168,7 +168,7 @@ void sync_server() {
         if (pClientEntry->file_info[i].size != FREE_FILE_SIZE) {
             printf("[PUSH %s to %s's device %d]\n", pClientEntry->file_info[i].name, username, d);
             sprintf(method, "PUSH %s", pClientEntry->file_info[i].name);
-            write(pClientEntry->devices_server[d], method, sizeof(method)); // TODO use SSL_write
+            SSL_write(pClientEntry->devices_server[d], method, sizeof(method)); // TODO use SSL_write
         }
     }
 
@@ -210,10 +210,10 @@ void receive_file(char *file) {
         pthread_mutex_unlock(&pClientEntry->mutex);
         // Send server file to client
         for(i = 0; i < MAXDEVICES; i++ ) {
-            if(pClientEntry->devices[i] == sock) {
+            if(pClientEntry->devices[i] == ssl) {
                 printf("[PUSH %s to %s's device %d]\n", file, pClientEntry->userid, i);
                 sprintf(method, "PUSH %s", file);
-                write(pClientEntry->devices_server[i], method, sizeof(method)); // TODO USE SSL write
+                SSL_write(pClientEntry->devices_server[i], method, sizeof(method));
             }
         }
     } else {
@@ -263,10 +263,10 @@ void receive_file(char *file) {
 
             // Send file to other connected devices
             for(i = 0; i < MAXDEVICES; i++ ) {
-                if(pClientEntry->devices[i] != INVALIDSOCKET && pClientEntry->devices[i] != sock) {
+                if(pClientEntry->devices[i] != NULL && pClientEntry->devices[i] != ssl) {
                     printf("[PUSH %s to %s's device %d]\n", file, pClientEntry->userid, i);
                     sprintf(method, "PUSH %s", file);
-                    write(pClientEntry->devices_server[i], method, sizeof(method)); // TODO use ssl_write
+                    SSL_write(pClientEntry->devices_server[i], method, sizeof(method)); // TODO use ssl_write
                 }
             }
         }
@@ -361,10 +361,10 @@ void delete_file(char *file) {
 
         // Delete file from other connected devices
         for(i = 0; i < MAXDEVICES; i++ ) {
-            if(pClientEntry->devices[i] != INVALIDSOCKET && pClientEntry->devices[i] != sock) {
+            if(pClientEntry->devices[i] != NULL && pClientEntry->devices[i] != ssl) {
                 printf("[DELETE %s to %s's device %d]\n", file, pClientEntry->userid, i);
                 sprintf(method, "DELETE %s", file);
-                write(pClientEntry->devices_server[i], method, sizeof(method)); // TODO use SSL_WRITE
+                SSL_write(pClientEntry->devices_server[i], method, sizeof(method)); // TODO use SSL_WRITE
             }
         }
     } else {
@@ -411,16 +411,16 @@ void free_device() {
     for (client_node = TAILQ_FIRST(&clients_tailq_head); client_node != NULL; client_node = tmp_client_node) {
         if (strcmp(client_node->client_entry.userid, username) == 0) {
             // Set current sock device free
-            if (client_node->client_entry.devices[0] == sock) {
-                client_node->client_entry.devices[0] = INVALIDSOCKET;
-                client_node->client_entry.devices_server[0] = INVALIDSOCKET;
-            } else if (client_node->client_entry.devices[1] == sock) {
-                client_node->client_entry.devices[1] = INVALIDSOCKET;
-                client_node->client_entry.devices_server[1] = INVALIDSOCKET;
+            if (client_node->client_entry.devices[0] == ssl) {
+                client_node->client_entry.devices[0] = NULL;
+                client_node->client_entry.devices_server[0] = NULL;
+            } else if (client_node->client_entry.devices[1] == ssl) {
+                client_node->client_entry.devices[1] = NULL;
+                client_node->client_entry.devices_server[1] = NULL;
             }
 
             // Set logged_in to 0 if user is not connected anymore in any device.
-            if (client_node->client_entry.devices[0] == INVALIDSOCKET && client_node->client_entry.devices[1] == INVALIDSOCKET) {
+            if (client_node->client_entry.devices[0] == NULL && client_node->client_entry.devices[1] == NULL) {
                 client_node->client_entry.logged_in = 0;
             }
 
@@ -437,8 +437,7 @@ void free_device() {
 void *connection_handler(void *socket_desc) {
     // Get the socket descriptor
     sock = *(int *) socket_desc;
-    int read_size, i, n, device_to_use;
-    uint16_t client_server_port;
+    int read_size, i, n, device_to_use, addrlen_cls;
     int *nullReturn = NULL;
     char file_path[256], client_ip[20], client_message[METHODSIZE];
     struct sockaddr_in addr;
@@ -477,13 +476,13 @@ void *connection_handler(void *socket_desc) {
         if (client_node->client_entry.devices[0] > 0 && client_node->client_entry.devices[1] > 0) {
             printf("Client already connected in two devices. Closing connection...\n");
             pthread_mutex_unlock(&clientCreationLock);
-            shutdown(sock, 2);
+            SSL_shutdown(ssl);
             pthread_exit(nullReturn);
 
         }
         // If it's connected only in one device, connect the second device.
         device_to_use = (client_node->client_entry.devices[0] < 0) ? 0 : 1;
-        client_node->client_entry.devices[device_to_use] = sock;
+        client_node->client_entry.devices[device_to_use] = ssl;
     }
     // If it's not found, it's not connected, so it need to be added to the client list.
     else {
@@ -495,8 +494,8 @@ void *connection_handler(void *socket_desc) {
         }
 
         device_to_use = 0;
-        client_node->client_entry.devices[0] = sock;
-        client_node->client_entry.devices[1] = INVALIDSOCKET;
+        client_node->client_entry.devices[0] = ssl;
+        client_node->client_entry.devices[1] = NULL;
         strcpy(client_node->client_entry.userid, username);
         client_node->client_entry.logged_in = 1;
         client_node->client_entry.mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
@@ -535,7 +534,6 @@ void *connection_handler(void *socket_desc) {
     int server_fd_cls, new_socket_cls;
     struct sockaddr_in address_cls;
     uint16_t port_converted;
-    char server_message[METHODSIZE];
 
     // Creating socket file descriptor
     if ((server_fd_cls = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
@@ -557,7 +555,7 @@ void *connection_handler(void *socket_desc) {
         exit(EXIT_FAILURE);
     }
 
-    socklen_t len = sizeof(address_cls);
+    socklen_t len_cls = sizeof(address_cls);
     if (getsockname(server_fd_cls, (struct sockaddr *)&address_cls, &len_cls) == -1) {
         perror("getsockname");
         exit(EXIT_FAILURE);
@@ -568,22 +566,22 @@ void *connection_handler(void *socket_desc) {
     SSL_write(ssl, &port_converted, sizeof(port_converted));
 
     // Accept and incoming connection
-    addrlen = sizeof(struct sockaddr_in);
-    while ((new_socket_cls = accept(server_fd_cls, (struct sockaddr *) &address_cls, (socklen_t *) &addrlen_cls))) {
-        debug_printf("ACEITOU CONEXAO\n");
+    addrlen_cls = sizeof(struct sockaddr_in);
+    new_socket_cls = accept(server_fd_cls, (struct sockaddr *) &address_cls, (socklen_t *) &addrlen_cls);
+    // TODO tratar retorno do accept?
+    debug_printf("ACEITOU CONEXAO\n");
 
-        // Attach SSL
-        ssl_cls = SSL_new(ctx);
-        SSL_set_fd(ssl_cls, new_socket);
+    // Attach SSL
+    ssl_cls = SSL_new(ctx);
+    SSL_set_fd(ssl_cls, new_socket_cls);
 
-        /* do SSL-protocol accept */
-        if ( SSL_accept(ssl_cls) == -1 ){
-            ERR_print_errors_fp(stderr);
-        }
+    /* do SSL-protocol accept */
+    if ( SSL_accept(ssl_cls) == -1 ){
+        ERR_print_errors_fp(stderr);
     }
 
     // Connect to client's server
-    client_node->client_entry.devices_server[device_to_use] =
+    client_node->client_entry.devices_server[device_to_use] = ssl_cls;
 
     // Receive requests from client
     while ((read_size = SSL_read(ssl, client_message, METHODSIZE)) > 0 ) {

@@ -5,13 +5,13 @@
 
 ## Etapa 2
 - [ ] Sincronização de relógio
-- [x] SSL: cliente-servidor
-- [ ] SSL: localserver
+- [x] SSL
 - [ ] Replicação
 
 
 ## Anotações para relatório etapa 2
 - usamos TLS1.2
+- Tiramos o localserver do cliente, e o colocamos em uma thread separada no servidor, assim podemos usar ssl (sem comprometer a chave ou precisra q os clientes tenham uma chave, o q nao faria sentido).
 
 -------------------------------
 
