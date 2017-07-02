@@ -41,6 +41,34 @@ pthread_mutex_t inotifyMutex = PTHREAD_MUTEX_INITIALIZER;
 TAILQ_HEAD(, tailq_entry) ignoredfiles_tailq_head;
 
 
+int getTimeServer(void){
+    int valread;
+    time_t server_time;
+
+    // Call server asking it's time
+    SSL_write(ssl, "TIME", METHODSIZE);
+
+    // Receive time
+    valread = SSL_read(ssl, &server_time, sizeof(server_time));
+
+    return server_time;
+}
+
+int getLogicalTime(void){
+    time_t t0, t1, ts, tc;
+
+    // Sets timestamp T0
+    t0 = time(NULL);
+    // Gets server logical time
+    ts = getTimeServer();
+    // Sets timestamp T1
+    t1 = time(NULL);
+    // Calculate client time
+    tc = ts + (t1 - t0)/2;
+
+    return tc;
+}
+
 int connect_server(char * host, int port) {
     int sock = 0;
     struct sockaddr_in serv_addr;
@@ -497,7 +525,7 @@ void* server_listener(void* unused) {
     if (SSL_connect(ssl_cls) == -1){
         printf("SSL connection refused\n");
         ERR_print_errors_fp(stderr);
-        return -1;
+        exit(-1);
     }
 
     pthread_barrier_wait(&serverlistenerbarrier);
@@ -618,13 +646,12 @@ int main(int argc, char * argv[]) {
     // Attach SSL
     ssl = SSL_new(ctx);
     SSL_set_fd(ssl, sock);
-    printf("aaa\n");
     if (SSL_connect(ssl) == -1){
         printf("SSL connection refused\n");
         ERR_print_errors_fp(stderr);
         return -1;
     }
-    ShowCerts(ssl);
+    //ShowCerts(ssl);
 
     // Initialize the tail queue
     TAILQ_INIT(&ignoredfiles_tailq_head);
@@ -660,6 +687,8 @@ int main(int argc, char * argv[]) {
 
     printf("Welcome to Dropbox! - v 1.0\n");
     cmdMan();
+
+    printf("Horario obtido: %d\n", getTimeServer());
 
     // Handle user input
     while (1) {

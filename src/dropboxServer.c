@@ -401,6 +401,14 @@ void list_files() {
     pthread_mutex_unlock(&pClientEntry->mutex);
 }
 
+void send_time() {
+    printf("<~ %s requested TIME\n", username);
+    // Send current time
+    time_t current_time = time(NULL);
+    SSL_write(ssl, &current_time, sizeof(current_time));
+    // TODO enviar como string? htonl?
+}
+
 void free_device() {
     struct tailq_entry *client_node;
     struct tailq_entry *tmp_client_node;
@@ -603,6 +611,9 @@ void *connection_handler(void *socket_desc) {
         } else if (!strncmp(client_message, "SYNC", 4)) {
             printf("Request method: SYNC\n");
             sync_server();
+        } else if (!strncmp(client_message, "TIME", 4)) {
+            printf("Request method: TIME\n");
+            send_time();
         }
     }
 

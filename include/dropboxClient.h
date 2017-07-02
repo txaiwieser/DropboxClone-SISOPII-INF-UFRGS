@@ -11,6 +11,7 @@ struct tailq_entry {
 #define BUF_LEN ( 1024 * ( EVENT_SIZE + 16 ) )
 
 int connect_server(char *host, int port);
+int getTimeServer(void);
 void sync_client();
 void send_file(char *file);
 void get_file(char *file, char *path);
