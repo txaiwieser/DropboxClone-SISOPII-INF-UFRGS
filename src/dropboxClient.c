@@ -43,13 +43,14 @@ TAILQ_HEAD(, tailq_entry) ignoredfiles_tailq_head;
 
 int getTimeServer(void){
     int valread;
-    time_t server_time;
+    uint32_t server_time;
 
     // Call server asking it's time
     SSL_write(ssl, "TIME", METHODSIZE);
 
     // Receive time
     valread = SSL_read(ssl, &server_time, sizeof(server_time));
+    server_time = ntohl(server_time);
 
     return server_time;
 }
@@ -104,7 +105,7 @@ void send_file(char *file) {
     struct stat st;
     char buffer[1024] = {0}, method[METHODSIZE];
     int valread, file_i, found_file = 0;
-    uint32_t length_converted;
+    uint32_t length_converted, time_converted;
 
     pthread_mutex_lock(&fileOperationMutex);
 
@@ -130,7 +131,8 @@ void send_file(char *file) {
             debug_printf("[%s method sent]\n", method);
 
             client_files[file_i].last_modified = getLogicalTime(); // REVIEW manter aqui ou colocar antes do for?
-            SSL_write(ssl, &client_files[file_i].last_modified, sizeof(client_files[file_i].last_modified));
+            time_converted = htonl(client_files[file_i].last_modified);
+            SSL_write(ssl, &time_converted, sizeof(time_converted));
 
             // Detect if file was created and local version is newer than server version, so file must be transfered
             valread = SSL_read(ssl, buffer, TRANSMISSION_MSG_SIZE);
@@ -216,6 +218,9 @@ void get_file(char *file, char *path) {
               }
           }
 
+          valread = SSL_read(ssl, &original_file_time, sizeof(time_t));
+          original_file_time = ntohl(original_file_time);
+
           // Search for file in user's list of files
           for(file_i = 0; file_i < MAXFILES; file_i++) {
               if(strcmp(client_files[file_i].name, file) == 0) {
@@ -244,7 +249,6 @@ void get_file(char *file, char *path) {
           fclose (fp);
 
           // Set modtime to original file modtime
-          valread = SSL_read(ssl, &original_file_time, sizeof(time_t));
           new_times.modtime = original_file_time; // set mtime to original file time
           new_times.actime = time(NULL); // set atime to current time
           utime(file_path, &new_times);
@@ -564,7 +568,7 @@ void cmdGetSyncDir() {
             pthread_barrier_wait(&syncbarrier); // wait for syncing all files
         }
     } else if(inotify_run == 0){
-
+        // Dir exists // REVIEW pode entrar aqui se a funcao makedir_if_not_exists der erro tb...
         // Insert data into struct file_info
         n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
         if (n > 2) { // Starting in i=2, it doesn't show '.' and '..'
@@ -771,10 +775,10 @@ int main(int argc, char * argv[]) {
     cmdGetSyncDir();
     printf("Done.\n\n");
 
-    printf("Welcome to Dropbox! - v 1.0\n");
-    cmdMan();
+    printf("Horário do Servidor: %d\n", getTimeServer());
 
-    printf("Horario obtido: %d\n", getTimeServer());
+    printf("Welcome to Dropbox! - v 2.0\n");
+    cmdMan();
 
     // Handle user input
     while (1) {

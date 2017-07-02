@@ -11,7 +11,6 @@
 ## Outros
 - [ ] Testar muito bem sincronização de relógio!
 - [ ] TODOs no código
-- [ ] Alguns itens que estão ali embaixo?
 - [ ] Talvez em alguns lugares da cliente em vez de ver se arquivo existe usando stat poderia ver se existe na estrutura.
 
 ## Anotações para relatório etapa 2

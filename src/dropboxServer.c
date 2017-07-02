@@ -201,6 +201,7 @@ void receive_file(char *file) {
 
     // Receive file modification time
     valread = SSL_read(ssl, &client_file_time, sizeof(client_file_time));
+    client_file_time = ntohl(client_file_time);
 
     // If file already exists and server's version is newer, it's not transfered.
     if((file_found >= 0) && (client_file_time < pClientEntry->file_info[file_found].last_modified)) {
@@ -275,7 +276,7 @@ void receive_file(char *file) {
 void send_file(char * file) {
     char file_path[256];
     struct stat st;
-    uint32_t length_converted;
+    uint32_t length_converted, time_converted;
 
     sprintf(file_path, "%s/%s", user_sync_dir_path, file);
 
@@ -319,7 +320,8 @@ void send_file(char * file) {
         fclose(fp);
 
         // Send file modification time
-        SSL_write(ssl, &st.st_mtime, sizeof(st.st_mtime));
+        time_converted = htonl(st.st_mtime);
+        SSL_write(ssl, &time_converted, sizeof(time_converted));
     } else {
         printf("File doesn't exist!\n");
         SSL_write(ssl, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
@@ -403,9 +405,9 @@ void list_files() {
 void send_time() {
     printf("<~ %s requested TIME\n", username);
     // Send current time
-    time_t current_time = time(NULL);
+    uint32_t current_time = time(NULL);
+    current_time = htonl(current_time);
     SSL_write(ssl, &current_time, sizeof(current_time));
-    // TODO enviar como string? htonl?
 }
 
 void free_device() {
