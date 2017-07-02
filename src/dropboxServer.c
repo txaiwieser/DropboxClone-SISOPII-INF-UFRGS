@@ -15,7 +15,6 @@
 #include <unistd.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-#include "../include/dropboxUtil.h"
 #include "../include/dropboxServer.h"
 
 __thread char username[MAXNAME], user_sync_dir_path[256];

@@ -4,14 +4,15 @@
 3. Inicie o cliente: ```./bin/dropboxClient usuario 127.0.0.1 3003```
 
 ## Etapa 2
-- [ ] Sincronização de relógio
+- [x] Sincronização de relógio
 - [x] SSL
 - [ ] Replicação
 
 ## Outros
+- [ ] Testar muito bem sincronização de relógio!
 - [ ] TODOs no código
-- [ ] Alguns itens que estão ali embaixo? 
-
+- [ ] Alguns itens que estão ali embaixo?
+- [ ] Talvez em alguns lugares da cliente em vez de ver se arquivo existe usando stat poderia ver se existe na estrutura.
 
 ## Anotações para relatório etapa 2
 - usamos TLS1.2
@@ -22,9 +23,6 @@
 
 ## Alta prioridade
 - [ ] Os arquivos devem ser sincronizados toda vez que o cliente conecta ou não? Seria uma boa pelo menos baixar os do servidor que estão com timestamp diferente...
-
-## Baixa prioridade
-- [ ] Transmitir timestamps como string? É a forma mais segura aparentemente
 
 ## Extra
 - [ ] Ao iniciar o cliente, os arquivos que foram modificados, deletados e adicionados ao sync_dir enquanto o cliente não estava online devem ser enviados ao servidor

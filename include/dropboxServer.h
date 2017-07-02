@@ -2,14 +2,6 @@
 
 #define MAXDEVICES 2 // Maximum number of connected devices for each user
 
-#define FREE_FILE_SIZE -1
-
-typedef struct file_info {
-  char name[MAXNAME]; // refere-se ao nome do arquivo, incluindo a extensão
-  time_t last_modified; // refere-se a data da última modificação no arquivo
-  int size; // indica o tamanho do arquivo, em bytes
-} FILE_INFO_t;
-
 typedef struct client {
   pthread_mutex_t mutex; // user mutex
   SSL *devices[MAXDEVICES]; // associado aos dispositivos do usuário

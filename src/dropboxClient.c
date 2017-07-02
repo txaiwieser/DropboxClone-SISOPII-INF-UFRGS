@@ -20,11 +20,11 @@
 #include <dirent.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-#include "../include/dropboxUtil.h"
 #include "../include/dropboxClient.h"
 
 char server_host[256], server_user[MAXNAME], user_sync_dir_path[256];
 int server_port = 0, sock = 0;
+FILE_INFO_t client_files[MAXFILES]; // List of client files
 uint16_t sync_files_left = MAXFILES, original_sync_files_left = MAXFILES;  // number of files yet to sync
 char *pIgnoredFileEntry; // Pointer to list of ignored files. It's used by inotify to prevent uploading a file that has just best downloaded.
 int inotify_run = 0;
@@ -103,12 +103,21 @@ int connect_server(char * host, int port) {
 void send_file(char *file) {
     struct stat st;
     char buffer[1024] = {0}, method[METHODSIZE];
-    int valread;
+    int valread, file_i, found_file = 0;
     uint32_t length_converted;
 
     pthread_mutex_lock(&fileOperationMutex);
 
-    if (stat(file, &st) == 0 && S_ISREG(st.st_mode)) { // If file exists
+    // Search for file in user's list of files
+    for(file_i = 0; file_i < MAXFILES; file_i++) {
+        if(strcmp(client_files[file_i].name, file) == 0) {
+            found_file = 1;
+            break;
+        }
+    }
+
+    if (found_file){
+        stat(file, &st);
         FILE *fp = fopen(file,"rb");
         if (fp == NULL) {
             printf("Couldn't open the file\n");
@@ -120,8 +129,8 @@ void send_file(char *file) {
             SSL_write(ssl, method, sizeof(method));
             debug_printf("[%s method sent]\n", method);
 
-            // Send file modification time
-            SSL_write(ssl, &st.st_mtime, sizeof(st.st_mtime));
+            client_files[file_i].last_modified = getLogicalTime(); // REVIEW manter aqui ou colocar antes do for?
+            SSL_write(ssl, &client_files[file_i].last_modified, sizeof(client_files[file_i].last_modified));
 
             // Detect if file was created and local version is newer than server version, so file must be transfered
             valread = SSL_read(ssl, buffer, TRANSMISSION_MSG_SIZE);
@@ -162,7 +171,7 @@ void send_file(char *file) {
 }
 
 void get_file(char *file, char *path) {
-    int valread;
+    int valread, file_i, file_found = -1, first_free_index = -1, file_size;
     uint32_t nLeft;
     time_t original_file_time;
     char buffer[1024] = {0}, method[METHODSIZE], file_path[256];
@@ -196,6 +205,7 @@ void get_file(char *file, char *path) {
               // Receive file size
               valread = SSL_read(ssl, &nLeft, sizeof(nLeft));
               nLeft = ntohl(nLeft);
+              file_size = nLeft;
               // Receive data in chunks
               while (nLeft > 0 && (valread = SSL_read(ssl, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
                   fwrite(buffer, 1, valread, fp);
@@ -205,6 +215,31 @@ void get_file(char *file, char *path) {
                   printf("\n Read Error \n");
               }
           }
+
+          // Search for file in user's list of files
+          for(file_i = 0; file_i < MAXFILES; file_i++) {
+              if(strcmp(client_files[file_i].name, file) == 0) {
+                  file_found = file_i;
+                  break;
+              }
+          }
+
+          // Find the next free slot in user's list of files
+          for(file_i = 0; file_i < MAXFILES; file_i++) {
+              if(client_files[file_i].size == FREE_FILE_SIZE && first_free_index == -1)
+                  first_free_index = file_i;
+          }
+
+          // If file already exists on client file list, update it. Otherwise, insert it.
+          if(file_found >= 0) {
+              client_files[file_found].size = file_size;
+              client_files[file_found].last_modified = original_file_time;
+          } else {
+              strcpy(client_files[first_free_index].name, file);
+              client_files[first_free_index].size = file_size;
+              client_files[first_free_index].last_modified = original_file_time;
+          }
+
           pthread_mutex_lock(&inotifyMutex); // prevent inotify of getting file before it's inserted in ignored file list
           fclose (fp);
 
@@ -237,7 +272,7 @@ void get_file(char *file, char *path) {
 void delete_server_file(char *file) {
     char method[METHODSIZE];
 
-    // Concatenate strings to get method = "DOWNLOAD filename"
+    // Concatenate strings to get method = "DELETE filename"
     sprintf(method, "DELETE %s", file);
 
     // Send to the server
@@ -246,6 +281,7 @@ void delete_server_file(char *file) {
 };
 
 void delete_local_file(char *file) {
+    int file_i, found_file = 0;
     char filepath[MAXNAME];
     struct tailq_entry *ignoredfile_node;
     sprintf(filepath, "%s/%s", user_sync_dir_path, file);
@@ -253,20 +289,42 @@ void delete_local_file(char *file) {
     pthread_mutex_lock(&fileOperationMutex);
     pthread_mutex_lock(&inotifyMutex); // prevent inotify of deleting file before it's inserted in ignored file list
 
-    if(remove(filepath) == 0) {
-        // Add to ignore list, so inotify doesn't send a DELETE method again to server
-        ignoredfile_node = malloc(sizeof(*ignoredfile_node));
-        strcpy(ignoredfile_node->filename, file);
-        if (ignoredfile_node == NULL) {
-            perror("malloc failed");
+    // Search for file in user's list of files
+    for(file_i = 0; file_i < MAXFILES; file_i++) {
+        // Stop if it is found
+        if(strcmp(client_files[file_i].name, file) == 0) {
+            found_file = 1;
+            break;
         }
-        TAILQ_INSERT_TAIL(&ignoredfiles_tailq_head, ignoredfile_node, entries);
-        debug_printf("[Inseriu arquivo %s na lista pois foi apagado primeiramente em outro dispositivo]\n", file);
-    };
+    }
+
+    if(found_file) {
+        // Set it's area free
+        strcpy(client_files[file_i].name, "filename.ext");
+        client_files[file_i].last_modified = time(NULL);
+        client_files[file_i].size = FREE_FILE_SIZE;
+
+        // Erase file
+        if(remove(filepath) == 0) {
+            // Add to ignore list, so inotify doesn't send a DELETE method again to server
+            ignoredfile_node = malloc(sizeof(*ignoredfile_node));
+            strcpy(ignoredfile_node->filename, file);
+            if (ignoredfile_node == NULL) {
+                perror("malloc failed");
+            }
+
+            TAILQ_INSERT_TAIL(&ignoredfiles_tailq_head, ignoredfile_node, entries);
+            debug_printf("[Inseriu arquivo %s na lista pois foi apagado primeiramente em outro dispositivo]\n", file);
+        } else {
+            printf("Unable to delete file\n");
+        }
+
+    } else {
+        printf("File not found\n");
+    }
 
     pthread_mutex_unlock(&inotifyMutex);
     pthread_mutex_unlock(&fileOperationMutex);
-
 };
 
 // Save list of files into user_sync_dir_path/.dropboxfiles
@@ -489,22 +547,45 @@ void* sync_daemon(void* unused) {
 
 void cmdGetSyncDir() {
     pthread_t thread_id;
+    int n, i;
+    char file_path[256];
+    struct dirent **namelist;
+    struct stat st;
+
     // Create user sync_dir if it doesn't exist and then sync files
     if(makedir_if_not_exists(user_sync_dir_path) == 0){
         // Create inotify thread for monitoring file changes
-		if (pthread_create(&thread_id, NULL, sync_daemon, NULL) < 0) {
-		    perror("could not create inotify thread");
-		}
-		inotify_run=1;
+        if (pthread_create(&thread_id, NULL, sync_daemon, NULL) < 0) {
+            perror("could not create inotify thread");
+        }
+        inotify_run = 1;
         sync_client();
-        if (original_sync_files_left > 0)
+        if (original_sync_files_left > 0) {
             pthread_barrier_wait(&syncbarrier); // wait for syncing all files
+        }
     } else if(inotify_run == 0){
+
+        // Insert data into struct file_info
+        n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
+        if (n > 2) { // Starting in i=2, it doesn't show '.' and '..'
+            for (i = 2; i < n; i++) {
+                sprintf(file_path, "%s/%s", user_sync_dir_path, namelist[i]->d_name);
+                stat(file_path, &st);
+
+                strcpy(client_files[i-2].name, namelist[i]->d_name);
+                client_files[i-2].last_modified = st.st_mtime;
+                client_files[i-2].size = st.st_size;
+
+                free(namelist[i]);
+            }
+        }
+        free(namelist);
+
         // Create inotify thread for monitoring file changes
 		if (pthread_create(&thread_id, NULL, sync_daemon, NULL) < 0) {
 		    perror("could not create inotify thread");
 		}
-		inotify_run=1;
+		inotify_run = 1;
     }
 };
 
@@ -615,7 +696,7 @@ int main(int argc, char * argv[]) {
     char filename[256];
     char buffer[1024];
     char * token;
-    int valread;
+    int valread, i;
     pthread_t thread_id;
 
     // Check number of parameters
@@ -655,6 +736,11 @@ int main(int argc, char * argv[]) {
 
     // Initialize the tail queue
     TAILQ_INIT(&ignoredfiles_tailq_head);
+
+    // Set size to FREE_FILE_SIZE for all the files, so we can check if a slot is free later
+    for (i = 0; i < MAXFILES; i++) {
+        client_files[i].size = FREE_FILE_SIZE;
+    }
 
     // Define path to user sync_dir folder
     sprintf(user_sync_dir_path, "%s/sync_dir_%s", getenv("HOME"), server_user);
