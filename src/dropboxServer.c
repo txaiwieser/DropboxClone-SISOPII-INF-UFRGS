@@ -61,7 +61,7 @@ int main(int argc, char * argv[]) {
     // Initialize SSL
     OpenSSL_add_all_algorithms();
     SSL_load_error_strings();
-    method = TLS_server_method();
+    method = TLSv1_2_server_method();
     ctx = SSL_CTX_new(method);
     if (ctx == NULL){
       ERR_print_errors_fp(stderr);
