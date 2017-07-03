@@ -59,6 +59,7 @@ int main(int argc, char * argv[]) {
     }
 
     // Initialize SSL
+    SSL_library_init();
     OpenSSL_add_all_algorithms();
     SSL_load_error_strings();
     method = TLSv1_2_server_method();
@@ -108,14 +109,17 @@ int main(int argc, char * argv[]) {
     addrlen = sizeof(struct sockaddr_in);
     pthread_t thread_id;
     while ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen))) {
+        debug_printf("aaa\n");
         // Attach SSL
         ssl = SSL_new(ctx);
         SSL_set_fd(ssl, new_socket);
 
+        debug_printf("bbb\n");
         /* do SSL-protocol accept */
         if ( SSL_accept(ssl) == -1 ){
             ERR_print_errors_fp(stderr);
         }
+        debug_printf("ccc\n");
 
         puts("Connection accepted");
 
@@ -459,9 +463,13 @@ void *connection_handler(void *socket_desc) {
     getpeername(sock, (struct sockaddr *)&addr, &addr_size);
     strcpy(client_ip, inet_ntoa(addr.sin_addr));
 
+    debug_printf("server vai receber username\n");
+
     // Receive username
     read_size = SSL_read(ssl, username, sizeof(username));
     username[read_size] = '\0';
+
+    debug_printf("USERNAME: %s\n", username);
 
     // Define path to user folder on server
     sprintf(user_sync_dir_path, "%s/server_sync_dir_%s", getenv("HOME"), username);

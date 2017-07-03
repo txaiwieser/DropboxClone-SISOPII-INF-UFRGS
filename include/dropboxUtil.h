@@ -17,6 +17,7 @@ typedef struct file_info {
   int size; // indica o tamanho do arquivo, em bytes
 } FILE_INFO_t;
 
+int connect_server(char *host, int port);
 void debug_printf(const char* message, ...);
 int makedir_if_not_exists(const char* path);
 int dir_exists(const char* path);
