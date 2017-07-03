@@ -48,6 +48,10 @@ int file_exists(const char* path) {
     return stat_result;
 }
 
+SSL* start_server(char * host, int port) {
+
+
+}
 
 SSL* connect_server(char * host, int port) {
     int sock = 0;

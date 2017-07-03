@@ -126,7 +126,7 @@ int main(int argc, char * argv[]) {
         if (pthread_create(&thread_id, NULL, connection_handler, (void *) &new_socket) < 0) {
             perror("could not create thread");
             return 1;
-        }
+        } // TODO Passar socket com SSL como parametro?
         // Now join the thread, so that we dont terminate before the thread
         // pthread_join(thread_id, NULL);
         puts("Handler assigned");
@@ -143,7 +143,7 @@ int main(int argc, char * argv[]) {
 
 // Send number of files to client and send PUSH for each file
 void sync_server() {
-    char method[METHODSIZE];
+    char method[MSGSIZE];
     int i, d;
     uint16_t nList = 0, nListConverted;
 
@@ -171,6 +171,7 @@ void sync_server() {
         if (pClientEntry->file_info[i].size != FREE_FILE_SIZE) {
             printf("[PUSH %s to %s's device %d]\n", pClientEntry->file_info[i].name, username, d);
             sprintf(method, "PUSH %s", pClientEntry->file_info[i].name);
+            debug_printf("pClientEntry: %d\n", pClientEntry->devices_server[d]);
             SSL_write(pClientEntry->devices_server[d], method, sizeof(method));
         }
     }
@@ -181,7 +182,7 @@ void sync_server() {
 void receive_file(char *file) {
     int valread, file_i, file_found = -1, first_free_index = -1, i;
     uint32_t nLeft, file_size;
-    char buffer[1024] = {0}, method[METHODSIZE], file_path[256];
+    char buffer[1024] = {0}, method[MSGSIZE], file_path[256];
     time_t client_file_time;
     struct utimbuf new_times;
 
@@ -336,7 +337,7 @@ void send_file(char * file) {
 void delete_file(char *file) {
     char file_path[256];
     int file_i, found_file = 0, i;
-    char method[METHODSIZE];
+    char method[MSGSIZE];
 
     sprintf(file_path, "%s/%s", user_sync_dir_path, file);
 
@@ -452,7 +453,7 @@ void *connection_handler(void *socket_desc) {
     sock = *(int *) socket_desc;
     int read_size, i, n, device_to_use, addrlen_cls;
     int *nullReturn = NULL;
-    char file_path[256], client_ip[20], client_message[METHODSIZE];
+    char file_path[256], client_ip[20], client_message[MSGSIZE];
     struct sockaddr_in addr;
     struct tailq_entry *client_node, *tmp_client_node;
     struct dirent **namelist;
@@ -586,6 +587,8 @@ void *connection_handler(void *socket_desc) {
     port_converted = address_cls.sin_port;
     SSL_write(ssl, &port_converted, sizeof(port_converted));
 
+    debug_printf("Socket CLS: %d\n", ntohs(port_converted));
+
     // Accept and incoming connection
     // FIXME paramos aqui!
     addrlen_cls = sizeof(struct sockaddr_in);
@@ -606,7 +609,7 @@ void *connection_handler(void *socket_desc) {
     client_node->client_entry.devices_server[device_to_use] = ssl_cls;
 
     // Receive requests from client
-    while ((read_size = SSL_read(ssl, client_message, METHODSIZE)) > 0 ) {
+    while ((read_size = SSL_read(ssl, client_message, MSGSIZE)) > 0 ) {
         // end of string marker
         client_message[read_size] = '\0';
 

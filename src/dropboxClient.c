@@ -44,7 +44,7 @@ int getTimeServer(void){
     uint32_t server_time;
 
     // Call server asking it's time
-    SSL_write(ssl, "TIME", METHODSIZE);
+    SSL_write(ssl, "TIME", MSGSIZE);
 
     // Receive time
     valread = SSL_read(ssl, &server_time, sizeof(server_time));
@@ -70,7 +70,7 @@ int getLogicalTime(void){
 
 void send_file(char *file) {
     struct stat st;
-    char buffer[1024] = {0}, method[METHODSIZE];
+    char buffer[1024] = {0}, method[MSGSIZE];
     int valread, file_i, found_file = 0;
     uint32_t length_converted, time_converted;
 
@@ -143,7 +143,7 @@ void get_file(char *file, char *path) {
     int valread, file_i, file_found = -1, first_free_index = -1, file_size;
     uint32_t nLeft;
     time_t original_file_time;
-    char buffer[1024] = {0}, method[METHODSIZE], file_path[256];
+    char buffer[1024] = {0}, method[MSGSIZE], file_path[256];
     struct utimbuf new_times;
     struct tailq_entry *ignoredfile_node;
 
@@ -241,7 +241,7 @@ void get_file(char *file, char *path) {
 };
 
 void delete_server_file(char *file) {
-    char method[METHODSIZE];
+    char method[MSGSIZE];
 
     // Concatenate strings to get method = "DELETE filename"
     sprintf(method, "DELETE %s", file);
@@ -347,7 +347,7 @@ void cmdList() {
     uint32_t nLeft;
     char buffer[1024] = {0};
 
-    SSL_write(ssl, "LIST", METHODSIZE);
+    SSL_write(ssl, "LIST", MSGSIZE);
 
     // Receive length
     SSL_read(ssl, &nLeft, sizeof(nLeft));
@@ -381,7 +381,7 @@ void sync_client() {
     pthread_mutex_lock(&fileOperationMutex);
     debug_printf("[Syncing...]\n");
 
-    SSL_write(ssl, "SYNC", METHODSIZE);
+    SSL_write(ssl, "SYNC", MSGSIZE);
 
     // Receive number of files
     SSL_read(ssl, &sync_files_left, sizeof(sync_files_left));
@@ -564,7 +564,7 @@ void cmdGetSyncDir() {
 void* server_listener(void* unused) {
     int read_size;
     uint16_t client_server_port;
-    char server_message[METHODSIZE];
+    char server_message[MSGSIZE];
 
     // Receive server port for new socket
     read_size = SSL_read(ssl, &client_server_port, sizeof(client_server_port));
@@ -580,7 +580,7 @@ void* server_listener(void* unused) {
     // TODO colocar barreira de volta pthread_barrier_wait(&serverlistenerbarrier);
 
     // Receive a message from server
-    while ((read_size = SSL_read(ssl_cls, server_message, METHODSIZE)) > 0 ) {
+    while ((read_size = SSL_read(ssl_cls, server_message, MSGSIZE)) > 0 ) {
         // end of string marker
         server_message[read_size] = '\0';
 
@@ -704,7 +704,7 @@ int main(int argc, char * argv[]) {
     pthread_barrier_init(&serverlistenerbarrier, NULL, 2);
 
     // Send username to server
-    SSL_write(ssl, server_user, strlen(server_user));
+    SSL_write(ssl, server_user, sizeof(server_user));
     // Detect if connection was closed
     valread = SSL_read(ssl, buffer, TRANSMISSION_MSG_SIZE);
     if (valread == 0 || strcmp(buffer, TRANSMISSION_CONFIRM) != 0) {
