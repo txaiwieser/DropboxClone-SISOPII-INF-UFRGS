@@ -52,7 +52,6 @@ int main(int argc, char * argv[]) {
         clients[i].devices_server[1] = NULL;
     }
 
-
     // Initialize SSL
     SSL_library_init();
     OpenSSL_add_all_algorithms();
@@ -244,13 +243,25 @@ void *client_server_handler(void *socket_desc) {
         return 0;
     }*/
 
-    // TODO Save SSL socket (for connecting to server) in client structure?
+
+
+    // TODO Save SSL socket (for connecting to server) in client structure? para funcioanr com multiplos clientes...
+
+    // Create thread for listening server
+    /*if (pthread_create(&thread_id, NULL, client_server_handler, (void *) &new_socket) < 0) {
+        perror("could not create thread");
+        return 1;
+    }*/
+
 
     // Keep listening to client requests
     while ((read_size = SSL_read(clients[user_id].devices[device_to_use], client_message, METHODSIZE)) > 0 ) {
         // end of string marker
         client_message[read_size] = '\0';
         printf("RECEBI %d bytes: %s\n", read_size, client_message);
+
+        SSL_write(primary_ssl, client_message, METHODSIZE);
+        printf("enviei\n");
         // TODO ler quantos caracteres?
         // TODO enviar pro servidor
     }

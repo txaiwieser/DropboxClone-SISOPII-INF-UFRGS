@@ -544,8 +544,12 @@ void *connection_handler(void *socket_desc) {
 
     pthread_mutex_unlock(&clientCreationLock);
 
+    printf("aaaaaaaaaaaaaaaaaaaaaaaaaalll\n");
+
     // Send "OK" to confirm connection was accepted.
     SSL_write(ssl, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
+
+    printf("f5sa8904fas84f0as\n");
 
     // Criar socket
     int server_fd_cls, new_socket_cls;
@@ -583,6 +587,7 @@ void *connection_handler(void *socket_desc) {
     SSL_write(ssl, &port_converted, sizeof(port_converted));
 
     // Accept and incoming connection
+    // FIXME paramos aqui!
     addrlen_cls = sizeof(struct sockaddr_in);
     new_socket_cls = accept(server_fd_cls, (struct sockaddr *) &address_cls, (socklen_t *) &addrlen_cls);
     // TODO tratar retorno do accept?
