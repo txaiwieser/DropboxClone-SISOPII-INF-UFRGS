@@ -562,7 +562,7 @@ void cmdGetSyncDir() {
 
 // Listen to server calls (PUSH, DELETE, ...)
 void* server_listener(void* unused) {
-    int sock_cls, read_size;
+    int read_size;
     uint16_t client_server_port;
     char server_message[METHODSIZE];
 
@@ -573,7 +573,7 @@ void* server_listener(void* unused) {
     // Connect and attach SSL
     ssl_cls = connect_server(server_host, client_server_port);
     if (ssl_cls == NULL) {
-        return -1;
+        return NULL;
     }
 
     pthread_barrier_wait(&serverlistenerbarrier);

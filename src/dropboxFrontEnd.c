@@ -17,19 +17,21 @@
 #include <openssl/err.h>
 #include "../include/dropboxFrontEnd.h"
 
+// TODO colocar mutex no frontend!!
+
 __thread char username[MAXNAME];
 __thread int sock;
 char primary_host[256];
 int primary_port = 0;
 int primary_sock;
 SSL *ssl, *ssl_cls, *primary_ssl; // TODO conferir se ta certo. Não deveria ser exclusivo da thread? pq aí caso tenha mais de um usuario ao mesmo tempo pode acabar confundindo os sockets...?
-const SSL_METHOD *method_server, *method_client;
-SSL_CTX *ctx, *ctx_client;
+const SSL_METHOD *method_ssl;
+SSL_CTX *ctx;
 FRONTEND_CLIENT_t clients[MAXCLIENTS];
 
 int main(int argc, char * argv[]) {
     struct sockaddr_in address;
-    int server_fd, new_socket, port, addrlen;
+    int server_fd, new_socket, port, addrlen, i;
 
     // REVIEW possibilidade de ter menos de 3? Possibilidade de rodar mais de um server na mesma maquina? (Sem vm)
     // Check number of parameters
@@ -41,14 +43,22 @@ int main(int argc, char * argv[]) {
     strcpy(primary_host, argv[2]);
     primary_port = atoi(argv[3]);
 
+    // Set userid to FREE_CLIENT_SLOT_USERID for all the clients, so we can check if a slot is free later
+    for (i = 0; i < MAXCLIENTS; i++) {
+        strcpy(clients[i].userid, FREE_CLIENT_SLOT_USERID);
+        clients[i].devices[0] = NULL;
+        clients[i].devices[1] = NULL;
+        clients[i].devices_server[0] = NULL;
+        clients[i].devices_server[1] = NULL;
+    }
+
+
     // Initialize SSL
     SSL_library_init();
     OpenSSL_add_all_algorithms();
     SSL_load_error_strings();
-    method_server = TLSv1_2_server_method();
-    method_client = TLSv1_2_client_method();
-    ctx = SSL_CTX_new(method_server);
-    ctx_client = SSL_CTX_new(method_client);
+    method_ssl = TLSv1_2_server_method();
+    ctx = SSL_CTX_new(method_ssl);
     if (ctx == NULL){
       ERR_print_errors_fp(stderr);
       abort();
@@ -119,7 +129,7 @@ int main(int argc, char * argv[]) {
 void *client_server_handler(void *socket_desc) {
     // Get the socket descriptor
     sock = *(int *) socket_desc;
-    int addrlen_cls, read_size, valread;
+    int addrlen_cls, read_size, valread, user_id, uid, device_to_use;
     char client_ip[20], buffer[1024];
     struct sockaddr_in addr;
 
@@ -135,7 +145,7 @@ void *client_server_handler(void *socket_desc) {
     // Send "OK" to confirm connection was accepted.
     SSL_write(ssl, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
 
-    // Criar socket
+    // Create socket for client's 'server'
     int server_fd_cls, new_socket_cls;
     struct sockaddr_in address_cls;
     uint16_t port_converted;
@@ -170,7 +180,7 @@ void *client_server_handler(void *socket_desc) {
     port_converted = address_cls.sin_port;
     SSL_write(ssl, &port_converted, sizeof(port_converted));
 
-    // Accept and incoming connection
+    // Accept an incoming connection
     addrlen_cls = sizeof(struct sockaddr_in);
     new_socket_cls = accept(server_fd_cls, (struct sockaddr *) &address_cls, (socklen_t *) &addrlen_cls);
     // TODO tratar retorno do accept?
@@ -185,18 +195,42 @@ void *client_server_handler(void *socket_desc) {
         ERR_print_errors_fp(stderr);
     }
 
+
+    // Search for user in list of clients
+    for(user_id = 0; user_id < MAXCLIENTS; user_id++){
+        if(strcmp(clients[user_id].userid, username) == 0){
+          break;
+        }
+    }
+    // If found
+    if(user_id != MAXCLIENTS){
+        // If it's connected only in one device, connect the second device.
+        device_to_use = (clients[user_id].devices[0] < 0) ? 0 : 1;
+        clients[user_id].devices[device_to_use] = ssl_cls;
+    } else {
+      // Insert in first free slot
+      for(uid = 0; uid < MAXCLIENTS; uid++) {
+          if(strcmp(clients[uid].userid, FREE_CLIENT_SLOT_USERID) == 0){
+              strcpy(clients[uid].userid, username);
+              clients[uid].devices[0] = ssl_cls;
+              break;
+          }
+      }
+      // If there's no slot free
+      if(uid == MAXCLIENTS){
+          return 0; // TODO colocar msg de erro dizendo q passou do limite de usuarios
+      }
+    }
+    // TODO quando cliente é desconectado setar username para 'avaialble'
+
     // Connect to server
     primary_ssl = connect_server(primary_host, primary_port);
     if (primary_ssl == NULL) {
-        return -1;
+        return NULL;
     }
-
-    debug_printf("vou escrever username\n");
 
     // Send username to server
     SSL_write(primary_ssl, username, strlen(username));
-
-    debug_printf("escrevi username\n");
 
     // Detect if connection was closed // TODO funcionando?? manter aqui e no cliente??
     valread = SSL_read(primary_ssl, buffer, TRANSMISSION_MSG_SIZE);
@@ -204,6 +238,9 @@ void *client_server_handler(void *socket_desc) {
         printf("%s is already connected in two devices. Closing connection...\n", username);
         return 0;
     }
+
+    // Save SSL socket in client structure
+    clients[user_id].devices_server[device_to_use] = primary_ssl;
 
     return NULL;
 }

@@ -70,12 +70,12 @@ SSL* connect_server(char * host, int port) {
     server = gethostbyname(host);
     if (server == NULL) {
         printf("ERROR, no such host\n");
-        return -1;
+        return NULL;
     }
 
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         printf("\n Socket creation error \n");
-        return -1;
+        return NULL;
     }
 
     memset(&serv_addr, '0', sizeof(serv_addr));

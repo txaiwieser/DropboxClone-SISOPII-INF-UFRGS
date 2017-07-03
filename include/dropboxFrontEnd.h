@@ -1,6 +1,7 @@
 #include "dropboxUtil.h"
 
 #define MAXCLIENTS 20
+#define FREE_CLIENT_SLOT_USERID "available"
 
 typedef struct frontend_client {
   SSL *devices[MAXDEVICES]; // associado aos dispositivos do usuário
