@@ -1,7 +1,5 @@
 #include "dropboxUtil.h"
 
-#define MAXDEVICES 2 // Maximum number of connected devices for each user
-
 typedef struct client {
   pthread_mutex_t mutex; // user mutex
   SSL *devices[MAXDEVICES]; // associado aos dispositivos do usuário

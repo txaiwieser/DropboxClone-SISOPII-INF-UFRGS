@@ -25,6 +25,7 @@ int primary_sock;
 SSL *ssl, *ssl_cls, *primary_ssl; // TODO conferir se ta certo. Não deveria ser exclusivo da thread? pq aí caso tenha mais de um usuario ao mesmo tempo pode acabar confundindo os sockets...?
 const SSL_METHOD *method_server, *method_client;
 SSL_CTX *ctx, *ctx_client;
+FRONTEND_CLIENT_t clients[MAXCLIENTS];
 
 int main(int argc, char * argv[]) {
     struct sockaddr_in address;
@@ -185,16 +186,8 @@ void *client_server_handler(void *socket_desc) {
     }
 
     // Connect to server
-    primary_sock = connect_server(primary_host, primary_port);
-    if (primary_sock < 0) {
-        return -1;
-    }
-    // Attach SSL
-    primary_ssl = SSL_new(ctx_client);
-    SSL_set_fd(primary_ssl, primary_sock);
-    if (SSL_connect(primary_ssl) == -1){
-        printf("SSL connection refused\n");
-        ERR_print_errors_fp(stderr);
+    primary_ssl = connect_server(primary_host, primary_port);
+    if (primary_ssl == NULL) {
         return -1;
     }
 

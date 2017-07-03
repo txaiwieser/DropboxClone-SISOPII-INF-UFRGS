@@ -29,8 +29,6 @@ uint16_t sync_files_left = MAXFILES, original_sync_files_left = MAXFILES;  // nu
 char *pIgnoredFileEntry; // Pointer to list of ignored files. It's used by inotify to prevent uploading a file that has just best downloaded.
 int inotify_run = 0;
 SSL *ssl, *ssl_cls; // TODO conferir se ta certo
-SSL_CTX *ctx;
-const SSL_METHOD *method;
 
 pthread_barrier_t syncbarrier;
 pthread_barrier_t serverlistenerbarrier;
@@ -573,13 +571,9 @@ void* server_listener(void* unused) {
     client_server_port = ntohs(client_server_port);
 
     // Connect and attach SSL
-    sock_cls = connect_server(server_host, client_server_port);
-    ssl_cls = SSL_new(ctx);
-    SSL_set_fd(ssl_cls, sock_cls);
-    if (SSL_connect(ssl_cls) == -1){
-        printf("SSL connection refused\n");
-        ERR_print_errors_fp(stderr);
-        exit(-1);
+    ssl_cls = connect_server(server_host, client_server_port);
+    if (ssl_cls == NULL) {
+        return -1;
     }
 
     pthread_barrier_wait(&serverlistenerbarrier);
@@ -682,28 +676,14 @@ int main(int argc, char * argv[]) {
     SSL_library_init();
     OpenSSL_add_all_algorithms();
     SSL_load_error_strings();
-    method = TLSv1_2_client_method();
-    ctx = SSL_CTX_new(method);
-    if (ctx == NULL){
-      ERR_print_errors_fp(stderr);
-      abort();
-    }
 
     // Connect to server
     debug_printf("[Client started with parameters User=%s IP=%s Port=%s]\n", argv[1], argv[2], argv[3]);
     strcpy(server_host, argv[2]);
     strcpy(server_user, argv[1]);
     server_port = atoi(argv[3]);
-    sock = connect_server(server_host, server_port);
-    if (sock < 0) {
-        return -1;
-    }
-    // Attach SSL
-    ssl = SSL_new(ctx);
-    SSL_set_fd(ssl, sock);
-    if (SSL_connect(ssl) == -1){
-        printf("SSL connection refused\n");
-        ERR_print_errors_fp(stderr);
+    ssl = connect_server(server_host, server_port);
+    if (ssl == NULL) {
         return -1;
     }
     //ShowCerts(ssl);
@@ -780,8 +760,6 @@ int main(int argc, char * argv[]) {
             else printf("Invalid command! Type 'help' to see the available commands\n");
         }
     }
-
-    SSL_CTX_free(ctx); // release context  TODO is it called on close_connection? i guess no
 
     return 0;
 }

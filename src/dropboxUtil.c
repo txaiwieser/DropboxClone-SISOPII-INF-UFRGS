@@ -8,6 +8,8 @@
 #include <netdb.h>
 #include <string.h>
 #include <pthread.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 #include "../include/dropboxUtil.h"
 
 pthread_mutex_t fileMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -47,10 +49,23 @@ int file_exists(const char* path) {
 }
 
 
-int connect_server(char * host, int port) {
+SSL* connect_server(char * host, int port) {
     int sock = 0;
     struct sockaddr_in serv_addr;
     struct hostent *server;
+    SSL_CTX *ctx;
+    const SSL_METHOD *method;
+    SSL *ssl;
+
+    SSL_library_init();
+    OpenSSL_add_all_algorithms();
+    SSL_load_error_strings();
+    method = TLSv1_2_client_method();
+    ctx = SSL_CTX_new(method);
+    if (ctx == NULL){
+      ERR_print_errors_fp(stderr);
+      abort();
+    }
 
     server = gethostbyname(host);
     if (server == NULL) {
@@ -72,8 +87,18 @@ int connect_server(char * host, int port) {
 
     if (connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
         printf("\nConnection Failed. \n");
-        return -1;
+        return NULL;
     }
 
-    return sock;
+    ssl = SSL_new(ctx);
+    SSL_set_fd(ssl, sock);
+    if (SSL_connect(ssl) == -1){
+        printf("SSL connection refused\n");
+        ERR_print_errors_fp(stderr);
+        return(NULL);
+    }
+
+    SSL_CTX_free(ctx); // release context
+
+    return ssl;
 }
