@@ -532,7 +532,7 @@ void cmdGetSyncDir() {
         inotify_run = 1;
         sync_client();
         if (original_sync_files_left > 0) {
-            pthread_barrier_wait(&syncbarrier); // wait for syncing all files
+            // TODO colocar de volta pthread_barrier_wait(&syncbarrier); // wait for syncing all files
         }
     } else if(inotify_run == 0){
         // Dir exists // REVIEW pode entrar aqui se a funcao makedir_if_not_exists der erro tb...
@@ -569,6 +569,7 @@ void* server_listener(void* unused) {
     // Receive server port for new socket
     read_size = SSL_read(ssl, &client_server_port, sizeof(client_server_port));
     client_server_port = ntohs(client_server_port);
+    debug_printf("client_server_port: %d\n", client_server_port);
 
     // Connect and attach SSL
     ssl_cls = connect_server(server_host, client_server_port);
@@ -576,7 +577,7 @@ void* server_listener(void* unused) {
         return NULL;
     }
 
-    pthread_barrier_wait(&serverlistenerbarrier);
+    // TODO colocar barreira de volta pthread_barrier_wait(&serverlistenerbarrier);
 
     // Receive a message from server
     while ((read_size = SSL_read(ssl_cls, server_message, METHODSIZE)) > 0 ) {
@@ -589,7 +590,7 @@ void* server_listener(void* unused) {
             if (sync_files_left > 1){
                 sync_files_left--;
             } else if(sync_files_left == 1  && original_sync_files_left >= 1){
-                pthread_barrier_wait(&syncbarrier);
+                // TODO colocar de volta pthread_barrier_wait(&syncbarrier);
                 sync_files_left--;
             }
         } else if (!strncmp(server_message, "DELETE", 6)) {
@@ -721,11 +722,14 @@ int main(int argc, char * argv[]) {
 
     // Create user sync_dir and sync files
     printf("Syncing...");
-    pthread_barrier_wait(&serverlistenerbarrier); // wait for server_listener connection
+    // TODO colocar barreira de volta!! pthread_barrier_wait(&serverlistenerbarrier); // wait for server_listener connection
+    // TODO tirar sleep
+    sleep(2);
     cmdGetSyncDir();
+
     printf("Done.\n\n");
 
-    printf("Horário do Servidor: %d\n", getTimeServer());
+    //printf("Horário do Servidor: %d\n", getTimeServer());
 
     printf("Welcome to Dropbox! - v 2.0\n");
     cmdMan();

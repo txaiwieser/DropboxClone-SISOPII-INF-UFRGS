@@ -130,8 +130,11 @@ void *client_server_handler(void *socket_desc) {
     // Get the socket descriptor
     sock = *(int *) socket_desc;
     int addrlen_cls, read_size, valread, user_id, uid, device_to_use;
-    char client_ip[20], buffer[1024];
+    char client_ip[20], buffer[1024], client_message[METHODSIZE];
     struct sockaddr_in addr;
+    int server_fd_cls, new_socket_cls;
+    struct sockaddr_in address_cls;
+    uint16_t port_converted;
 
     // Get socket addr and client IP
     socklen_t addr_size = sizeof(struct sockaddr_in);
@@ -146,10 +149,6 @@ void *client_server_handler(void *socket_desc) {
     SSL_write(ssl, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
 
     // Create socket for client's 'server'
-    int server_fd_cls, new_socket_cls;
-    struct sockaddr_in address_cls;
-    uint16_t port_converted;
-
     // Creating socket file descriptor
     if ((server_fd_cls = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("socket failed");
@@ -202,17 +201,23 @@ void *client_server_handler(void *socket_desc) {
           break;
         }
     }
+
     // If found
     if(user_id != MAXCLIENTS){
         // If it's connected only in one device, connect the second device.
         device_to_use = (clients[user_id].devices[0] < 0) ? 0 : 1;
-        clients[user_id].devices[device_to_use] = ssl_cls;
+        clients[user_id].devices[device_to_use] = ssl;
+        clients[user_id].devices_server[device_to_use] = ssl_cls;
+        debug_printf("device_to_use: %d\n", device_to_use);
     } else {
       // Insert in first free slot
       for(uid = 0; uid < MAXCLIENTS; uid++) {
           if(strcmp(clients[uid].userid, FREE_CLIENT_SLOT_USERID) == 0){
               strcpy(clients[uid].userid, username);
-              clients[uid].devices[0] = ssl_cls;
+              device_to_use = 0;
+              clients[uid].devices[device_to_use] = ssl;
+              clients[uid].devices_server[device_to_use] = ssl_cls;
+              user_id = uid;
               break;
           }
       }
@@ -233,14 +238,23 @@ void *client_server_handler(void *socket_desc) {
     SSL_write(primary_ssl, username, strlen(username));
 
     // Detect if connection was closed // TODO funcionando?? manter aqui e no cliente??
-    valread = SSL_read(primary_ssl, buffer, TRANSMISSION_MSG_SIZE);
+    /*valread = SSL_read(primary_ssl, buffer, TRANSMISSION_MSG_SIZE);
     if (valread == 0 || strcmp(buffer, TRANSMISSION_CONFIRM) != 0) {
         printf("%s is already connected in two devices. Closing connection...\n", username);
         return 0;
+    }*/
+
+    // TODO Save SSL socket (for connecting to server) in client structure?
+
+    // Keep listening to client requests
+    while ((read_size = SSL_read(clients[user_id].devices[device_to_use], client_message, METHODSIZE)) > 0 ) {
+        // end of string marker
+        client_message[read_size] = '\0';
+        printf("RECEBI %d bytes: %s\n", read_size, client_message);
+        // TODO ler quantos caracteres?
+        // TODO enviar pro servidor
     }
 
-    // Save SSL socket in client structure
-    clients[user_id].devices_server[device_to_use] = primary_ssl;
 
     return NULL;
 }
