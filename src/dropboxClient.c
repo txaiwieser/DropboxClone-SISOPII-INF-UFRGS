@@ -38,28 +38,16 @@ pthread_mutex_t inotifyMutex = PTHREAD_MUTEX_INITIALIZER;
 
 TAILQ_HEAD(, tailq_entry) ignoredfiles_tailq_head;
 
-
-int getTimeServer(void){
-    int valread;
-    uint32_t server_time;
-
-    // Call server asking it's time
-    SSL_write(ssl, "TIME", MSGSIZE);
-
-    // Receive time
-    valread = SSL_read(ssl, &server_time, sizeof(server_time));
-    server_time = ntohl(server_time);
-
-    return server_time;
-}
-
 int getLogicalTime(void){
     time_t t0, t1, ts, tc;
+    char buffer[MSGSIZE] = {0};
 
     // Sets timestamp T0
     t0 = time(NULL);
     // Gets server logical time
-    ts = getTimeServer();
+    SSL_write(ssl, "TIME", MSGSIZE);
+    SSL_read(ssl, buffer, MSGSIZE);
+    ts = atol(buffer); // TODO atoi?
     // Sets timestamp T1
     t1 = time(NULL);
     // Calculate client time
@@ -72,7 +60,6 @@ void send_file(char *file) {
     struct stat st;
     char buffer[MSGSIZE] = {0}, method[MSGSIZE];
     int valread, file_i, found_file = 0;
-    uint32_t length_converted, time_converted;
 
     pthread_mutex_lock(&fileOperationMutex);
 
@@ -84,7 +71,9 @@ void send_file(char *file) {
         }
     }
 
-    if (found_file){
+    // TODO trocar condicao? confirmar se o funcionamento ta adequado
+
+    if (!found_file){
         stat(file, &st);
         FILE *fp = fopen(file,"rb");
         if (fp == NULL) {
@@ -97,26 +86,31 @@ void send_file(char *file) {
             SSL_write(ssl, method, sizeof(method));
             debug_printf("[%s method sent]\n", method);
 
-            client_files[file_i].last_modified = getLogicalTime(); // REVIEW manter aqui ou colocar antes do for?
-            time_converted = htonl(client_files[file_i].last_modified);
-            SSL_write(ssl, &time_converted, sizeof(time_converted));
+            sprintf(buffer, "%d", getLogicalTime()); // TODO integer? long?
+            debug_printf("buffer = %d\n", buffer);
+            SSL_write(ssl, buffer, MSGSIZE);
+
+            debug_printf("vou ler\n");
 
             // Detect if file was created and local version is newer than server version, so file must be transfered
             valread = SSL_read(ssl, buffer, MSGSIZE);
+            debug_printf("leuuuuu\n");
             if (strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) == 0) {
+                debug_printf("ooooo\n");
                 // Send file size to server
-                length_converted = htonl(st.st_size);
-                SSL_write(ssl, &length_converted, sizeof(length_converted));
+                sprintf(buffer, "%d", st.st_size); // TODO integer? long?
+                SSL_write(ssl, buffer, MSGSIZE);
 
                 // Read data from file and send it
                 while (1) {
                     // First read file in chunks of 1024 bytes
-                    unsigned char buff[1024] = {0};
+                    unsigned char buff[MSGSIZE] = {0};
                     int nread = fread(buff, 1, sizeof(buff), fp);
+                    buff[nread] = '\0';
 
                     // If read was success, send data.
                     if (nread > 0) {
-                        SSL_write(ssl, buff, nread);
+                        SSL_write(ssl, buff, MSGSIZE);
                     }
 
                     // Either there was error, or reached end of file
@@ -186,11 +180,8 @@ void get_file(char *file, char *path) {
               }
           }
 
-          // TODO ajeitar aqui
           SSL_read(ssl, buffer, MSGSIZE);
           original_file_time = atol(buffer); // TODO nao usar atoi? atol? outras funcoes mais seguras?
-          //valread = SSL_read(ssl, &original_file_time, sizeof(time_t));
-          //original_file_time = ntohl(original_file_time);
 
           // Search for file in user's list of files
           for(file_i = 0; file_i < MAXFILES; file_i++) {
@@ -382,14 +373,16 @@ void cmdExit() {
 }
 
 void sync_client() {
+    char buffer[MSGSIZE];
+
     pthread_mutex_lock(&fileOperationMutex);
     debug_printf("[Syncing...]\n");
 
     SSL_write(ssl, "SYNC", MSGSIZE);
 
     // Receive number of files
-    SSL_read(ssl, &sync_files_left, sizeof(sync_files_left));
-    sync_files_left = ntohs(sync_files_left);
+    SSL_read(ssl, buffer, MSGSIZE);
+    sync_files_left = atoi(buffer); // TODO nao usar atoi? atol? outras funcoes mais seguras?
     original_sync_files_left = sync_files_left;
 
     /* TODO Sync modifications since last logout
@@ -568,11 +561,11 @@ void cmdGetSyncDir() {
 void* server_listener(void* unused) {
     int read_size;
     uint16_t client_server_port;
-    char server_message[MSGSIZE];
+    char buffer[MSGSIZE];
 
     // Receive server port for new socket
-    read_size = SSL_read(ssl, &client_server_port, sizeof(client_server_port));
-    client_server_port = ntohs(client_server_port);
+    SSL_read(ssl, buffer, MSGSIZE);
+    client_server_port = atoi(buffer); // TODO nao usar atoi? atol? outras funcoes mais seguras?
     debug_printf("client_server_port: %d\n", client_server_port);
 
     // Connect and attach SSL
@@ -584,22 +577,22 @@ void* server_listener(void* unused) {
     // TODO colocar barreira de volta pthread_barrier_wait(&serverlistenerbarrier);
 
     // Receive a message from server
-    while ((read_size = SSL_read(ssl_cls, server_message, MSGSIZE)) > 0 ) {
+    while ((read_size = SSL_read(ssl_cls, buffer, MSGSIZE)) > 0 ) {
         // end of string marker
-        server_message[read_size] = '\0';
+        buffer[read_size] = '\0';
 
-        if (!strncmp(server_message, "PUSH", 4)) {
+        if (!strncmp(buffer, "PUSH", 4)) {
             debug_printf("[received PUSH from server]\n");
-            get_file(server_message + 5, user_sync_dir_path);
+            get_file(buffer + 5, user_sync_dir_path);
             if (sync_files_left > 1){
                 sync_files_left--;
             } else if(sync_files_left == 1  && original_sync_files_left >= 1){
                 // TODO colocar de volta pthread_barrier_wait(&syncbarrier);
                 sync_files_left--;
             }
-        } else if (!strncmp(server_message, "DELETE", 6)) {
+        } else if (!strncmp(buffer, "DELETE", 6)) {
             debug_printf("[received DELETE from server]\n");
-            delete_local_file(server_message + 7);
+            delete_local_file(buffer + 7);
         }
     }
 
@@ -733,7 +726,7 @@ int main(int argc, char * argv[]) {
 
     printf("Done.\n\n");
 
-    //printf("Horário do Servidor: %d\n", getTimeServer());
+    printf("Horário Lógico: %d\n", getLogicalTime());
 
     printf("Welcome to Dropbox! - v 2.0\n");
     cmdMan();

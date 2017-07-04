@@ -138,7 +138,7 @@ void *server_sync_handler(void *socket_desc) { // TODO Passar socket com SSL com
     while ((read_size = SSL_read(primary_ssl_sync, buffer, MSGSIZE)) > 0 ) {
         // end of string marker
         buffer[read_size] = '\0';
-        printf("RECEBI %d bytes: %s\n", read_size, buffer);
+        printf("RECEBI do servidor %d bytes: %s\n", read_size, buffer);
 
         SSL_write(clients[user_id].devices_server[device_to_use], buffer, MSGSIZE);
         printf("enviei pro cliente cls\n");
@@ -221,8 +221,8 @@ void *client_server_handler(void *socket_desc) {
     }
 
     // Send port to the client
-    port_converted = address_cls.sin_port;
-    SSL_write(ssl, &port_converted, sizeof(port_converted));
+    sprintf(buffer, "%d", ntohs(address_cls.sin_port)); // TODO integer? long?
+    SSL_write(ssl, buffer, MSGSIZE);
 
     // Accept an incoming connection
     addrlen_cls = sizeof(struct sockaddr_in);
@@ -291,8 +291,8 @@ void *client_server_handler(void *socket_desc) {
     }
 
     // Receive server port for new socket
-    valread = SSL_read(primary_ssl, &primary_sync_port, sizeof(primary_sync_port));
-    primary_sync_port = ntohs(primary_sync_port);
+    SSL_read(primary_ssl, buffer, MSGSIZE);
+    primary_sync_port = atoi(buffer); // TODO nao usar atoi? atol? outras funcoes mais seguras?
     debug_printf("primary_sync_port: %d\n", primary_sync_port);
 
     // Connect and attach SSL
@@ -307,11 +307,11 @@ void *client_server_handler(void *socket_desc) {
     pthread_t thread_id, thread_id2;
     if (pthread_create(&thread_id, NULL, server_response_handler, (void *) &primary_ssl) < 0) {
         perror("could not create thread");
-        return 1;
+        return NULL;
     }
     if (pthread_create(&thread_id2, NULL, server_sync_handler, (void *) &primary_ssl_sync) < 0) {
         perror("could not create thread");
-        return 1;
+        return NULL;
     }
 
 
@@ -319,10 +319,10 @@ void *client_server_handler(void *socket_desc) {
     while ((read_size = SSL_read(clients[user_id].devices[device_to_use], buffer, MSGSIZE)) > 0 ) {
         // end of string marker
         buffer[read_size] = '\0';
-        printf("RECEBI %d bytes: %s\n", read_size, buffer);
+        printf("RECEBI do cliente %d bytes: %s\n", read_size, buffer);
 
         SSL_write(primary_ssl, buffer, MSGSIZE);
-        printf("enviei\n");
+        printf("enviei pro servidor\n");
         // TODO ler quantos caracteres?
         // TODO enviar pro servidor
     }
