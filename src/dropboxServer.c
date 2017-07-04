@@ -182,7 +182,7 @@ void sync_server() {
 void receive_file(char *file) {
     int valread, file_i, file_found = -1, first_free_index = -1, i;
     uint32_t nLeft, file_size;
-    char buffer[1024] = {0}, method[MSGSIZE], file_path[256];
+    char buffer[MSGSIZE] = {0}, method[MSGSIZE], file_path[256];
     time_t client_file_time;
     struct utimbuf new_times;
 
@@ -227,11 +227,11 @@ void receive_file(char *file) {
         fp = fopen(file_path, "wb");
         if (NULL == fp) {
             printf("Error opening file");
-            SSL_write(ssl, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
+            SSL_write(ssl, TRANSMISSION_CANCEL, MSGSIZE);
             pthread_mutex_unlock(&pClientEntry->mutex);
         } else {
             // Send "OK" to confirm file was created and is newer than the server version, so it should be transfered
-            SSL_write(ssl, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
+            SSL_write(ssl, TRANSMISSION_CONFIRM, MSGSIZE);
 
             // Receive file size
             valread = SSL_read(ssl, &file_size, sizeof(file_size));
@@ -291,10 +291,10 @@ void send_file(char * file) {
         FILE *fp = fopen(file_path,"rb");
         if (fp == NULL) {
             printf("File open error");
-            SSL_write(ssl, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
+            SSL_write(ssl, TRANSMISSION_CANCEL, MSGSIZE);
         } else {
             // Send "OK" exists and was opened
-            SSL_write(ssl, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
+            SSL_write(ssl, TRANSMISSION_CONFIRM, MSGSIZE);
 
             // Send file size to client
             length_converted = htonl(st.st_size);
@@ -329,7 +329,7 @@ void send_file(char * file) {
         SSL_write(ssl, &time_converted, sizeof(time_converted));
     } else {
         printf("File doesn't exist!\n");
-        SSL_write(ssl, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
+        SSL_write(ssl, TRANSMISSION_CANCEL, MSGSIZE);
     }
     pthread_mutex_unlock(&pClientEntry->mutex);
 }
@@ -382,6 +382,7 @@ void delete_file(char *file) {
 void list_files() {
     char filename_string[MAXNAME];
     int i;
+    char buffer[MSGSIZE] = {0};
     uint32_t nList = 0, nListConverted;
 
     printf("<~ %s requested LIST\n", username);
@@ -393,8 +394,10 @@ void list_files() {
         if (pClientEntry->file_info[i].size != FREE_FILE_SIZE)
             nList += strlen(pClientEntry->file_info[i].name) + 1;
     }
-    nListConverted = htonl(nList);
-    SSL_write(ssl, &nListConverted, sizeof(nListConverted));
+    //nListConverted = htonl(nList);
+    //sprintf(buffer, "%d", nListConverted);
+    sprintf(buffer, "%d", nList); // TODO integer? long?
+    SSL_write(ssl, buffer, MSGSIZE);
 
     // Send filenames
     for (i = 0; i < MAXFILES; i++) {
@@ -548,7 +551,7 @@ void *connection_handler(void *socket_desc) {
     printf("aaaaaaaaaaaaaaaaaaaaaaaaaalll\n");
 
     // Send "OK" to confirm connection was accepted.
-    SSL_write(ssl, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
+    SSL_write(ssl, TRANSMISSION_CONFIRM, MSGSIZE);
 
     printf("f5sa8904fas84f0as\n");
 

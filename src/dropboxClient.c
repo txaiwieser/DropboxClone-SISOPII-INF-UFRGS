@@ -70,7 +70,7 @@ int getLogicalTime(void){
 
 void send_file(char *file) {
     struct stat st;
-    char buffer[1024] = {0}, method[MSGSIZE];
+    char buffer[MSGSIZE] = {0}, method[MSGSIZE];
     int valread, file_i, found_file = 0;
     uint32_t length_converted, time_converted;
 
@@ -102,7 +102,7 @@ void send_file(char *file) {
             SSL_write(ssl, &time_converted, sizeof(time_converted));
 
             // Detect if file was created and local version is newer than server version, so file must be transfered
-            valread = SSL_read(ssl, buffer, TRANSMISSION_MSG_SIZE);
+            valread = SSL_read(ssl, buffer, MSGSIZE);
             if (strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) == 0) {
                 // Send file size to server
                 length_converted = htonl(st.st_size);
@@ -143,7 +143,7 @@ void get_file(char *file, char *path) {
     int valread, file_i, file_found = -1, first_free_index = -1, file_size;
     uint32_t nLeft;
     time_t original_file_time;
-    char buffer[1024] = {0}, method[MSGSIZE], file_path[256];
+    char buffer[MSGSIZE] = {0}, method[MSGSIZE], file_path[256];
     struct utimbuf new_times;
     struct tailq_entry *ignoredfile_node;
 
@@ -163,7 +163,7 @@ void get_file(char *file, char *path) {
         debug_printf("[%s method sent]\n", method);
 
         // Detect if server accepted transmission
-        valread = SSL_read(ssl, buffer, TRANSMISSION_MSG_SIZE);
+        valread = SSL_read(ssl, buffer, MSGSIZE);
         if (strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) == 0) {
           // Create file where data will be stored
           FILE *fp;
@@ -176,6 +176,7 @@ void get_file(char *file, char *path) {
               nLeft = ntohl(nLeft);
               file_size = nLeft;
               // Receive data in chunks
+              // TODO confiramr se ta certo usar o min().. na LIST nao usei, e funfou..
               while (nLeft > 0 && (valread = SSL_read(ssl, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
                   fwrite(buffer, 1, valread, fp);
                   nLeft -= valread;
@@ -345,19 +346,19 @@ void save_list_of_files() {
 void cmdList() {
     int valread;
     uint32_t nLeft;
-    char buffer[1024] = {0};
+    char buffer[MSGSIZE] = {0};
 
     SSL_write(ssl, "LIST", MSGSIZE);
 
     // Receive length
-    SSL_read(ssl, &nLeft, sizeof(nLeft));
-    nLeft = ntohl(nLeft);
+    SSL_read(ssl, buffer, MSGSIZE);
+    nLeft = atoi(buffer); // TODO nao usar atoi?
 
     // Receive list of files in chunks
     while (nLeft > 0 && (valread = SSL_read(ssl, buffer, sizeof(buffer))) > 0) {
         buffer[valread] = '\0';
         printf("%s", buffer);
-        nLeft -= valread;
+        nLeft -= strlen(buffer);
     }
 };
 
@@ -662,7 +663,7 @@ void ShowCerts(SSL* ssl)
 int main(int argc, char * argv[]) {
     char cmd[256];
     char filename[256];
-    char buffer[1024];
+    char buffer[MSGSIZE];
     char * token;
     int valread, i;
     pthread_t thread_id;
@@ -706,8 +707,8 @@ int main(int argc, char * argv[]) {
     // Send username to server
     SSL_write(ssl, server_user, sizeof(server_user));
     // Detect if connection was closed
-    valread = SSL_read(ssl, buffer, TRANSMISSION_MSG_SIZE);
-    if (valread == 0 || strcmp(buffer, TRANSMISSION_CONFIRM) != 0) {
+    valread = SSL_read(ssl, buffer, MSGSIZE);
+    if (valread == 0 || strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) != 0) {
         printf("%s is already connected in two devices. Closing connection...\n", server_user);
         return 0;
     }

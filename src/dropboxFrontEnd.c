@@ -160,6 +160,7 @@ void *server_response_handler(void *socket_desc) { // TODO Passar socket com SSL
     while ((read_size = SSL_read(primary_ssl, buffer, MSGSIZE)) > 0 ) {
         // end of string marker
         buffer[read_size] = '\0';
+        printf("RECEBI %d bytes: %s\n", read_size, buffer);
 
         SSL_write(clients[user_id].devices[device_to_use], buffer, MSGSIZE);
         printf("enviei pro cliente\n");
@@ -190,7 +191,7 @@ void *client_server_handler(void *socket_desc) {
     username[read_size] = '\0';
 
     // Send "OK" to confirm connection was accepted.
-    SSL_write(ssl, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE);
+    SSL_write(ssl, TRANSMISSION_CONFIRM, MSGSIZE);
 
     // Create socket for client's 'server'
     // Creating socket file descriptor
@@ -282,10 +283,9 @@ void *client_server_handler(void *socket_desc) {
     SSL_write(primary_ssl, username, sizeof(username));
 
     // Detect if connection was closed // TODO funcionando?? manter aqui e no cliente??
-    valread = SSL_read(primary_ssl, buffer, TRANSMISSION_MSG_SIZE);
-    buffer[valread] = '\0';
+    valread = SSL_read(primary_ssl, buffer, MSGSIZE);
     debug_printf("Buffer: %s\n", buffer);
-    if (valread == 0 || strcmp(buffer, TRANSMISSION_CONFIRM) != 0) {
+    if (valread == 0 || strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) != 0) {
         printf("%s is already connected in two devices. Closing connection...\n", username);
         return 0;
     }
