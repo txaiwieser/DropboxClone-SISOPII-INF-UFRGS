@@ -529,7 +529,7 @@ void cmdGetSyncDir() {
         inotify_run = 1;
         sync_client();
         if (original_sync_files_left > 0) {
-            // TODO colocar de volta pthread_barrier_wait(&syncbarrier); // wait for syncing all files
+            pthread_barrier_wait(&syncbarrier); // wait for syncing all files
         }
     } else if(inotify_run == 0){
         // Dir exists // REVIEW pode entrar aqui se a funcao makedir_if_not_exists der erro tb...
@@ -574,7 +574,7 @@ void* server_listener(void* unused) {
         return NULL;
     }
 
-    // TODO colocar barreira de volta pthread_barrier_wait(&serverlistenerbarrier);
+    pthread_barrier_wait(&serverlistenerbarrier);
 
     // Receive a message from server
     while ((read_size = SSL_read(ssl_cls, buffer, MSGSIZE)) > 0 ) {
@@ -587,7 +587,7 @@ void* server_listener(void* unused) {
             if (sync_files_left > 1){
                 sync_files_left--;
             } else if(sync_files_left == 1  && original_sync_files_left >= 1){
-                // TODO colocar de volta pthread_barrier_wait(&syncbarrier);
+                pthread_barrier_wait(&syncbarrier);
                 sync_files_left--;
             }
         } else if (!strncmp(buffer, "DELETE", 6)) {
@@ -719,9 +719,8 @@ int main(int argc, char * argv[]) {
 
     // Create user sync_dir and sync files
     printf("Syncing...");
-    // TODO colocar barreira de volta!! pthread_barrier_wait(&serverlistenerbarrier); // wait for server_listener connection
-    // TODO tirar sleep
-    sleep(2);
+    pthread_barrier_wait(&serverlistenerbarrier); // wait for server_listener connection
+
     cmdGetSyncDir();
 
     printf("Done.\n\n");
