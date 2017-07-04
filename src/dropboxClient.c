@@ -178,8 +178,8 @@ void get_file(char *file, char *path) {
 
               // Receive data in chunks
               while (nLeft > 0 && (valread = SSL_read(ssl, buffer, sizeof(buffer))) > 0) {
-                  fwrite(buffer, 1, valread, fp);
-                  nLeft -= strlen(buffer);
+                  fwrite(buffer, 1, MIN(nLeft,valread), fp);
+                  nLeft -= MIN(nLeft,valread);
               }
               if (valread < 0) {
                   printf("\n Read Error \n");

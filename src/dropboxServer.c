@@ -307,10 +307,12 @@ void send_file(char * file) {
                 // First read file in chunks
                 unsigned char buff[MSGSIZE] = {0};
                 int nread = fread(buff, 1, sizeof(buff), fp);
+                buff[nread] = '\0';
 
                 // If read was success, send data.
                 if (nread > 0) {
                     SSL_write(ssl, buff, MSGSIZE);
+                    debug_printf("Escrevi nread=: %d\n", nread);
                 }
 
                 // Either there was error, or reached end of file
