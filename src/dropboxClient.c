@@ -172,22 +172,25 @@ void get_file(char *file, char *path) {
               printf("Error opening file");
           } else {
               // Receive file size
-              valread = SSL_read(ssl, &nLeft, sizeof(nLeft));
-              nLeft = ntohl(nLeft);
+              SSL_read(ssl, buffer, MSGSIZE);
+              nLeft = atoi(buffer); // TODO nao usar atoi?
               file_size = nLeft;
+
               // Receive data in chunks
-              // TODO confiramr se ta certo usar o min().. na LIST nao usei, e funfou..
-              while (nLeft > 0 && (valread = SSL_read(ssl, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
+              while (nLeft > 0 && (valread = SSL_read(ssl, buffer, sizeof(buffer))) > 0) {
                   fwrite(buffer, 1, valread, fp);
-                  nLeft -= valread;
+                  nLeft -= strlen(buffer);
               }
               if (valread < 0) {
                   printf("\n Read Error \n");
               }
           }
 
-          valread = SSL_read(ssl, &original_file_time, sizeof(time_t));
-          original_file_time = ntohl(original_file_time);
+          // TODO ajeitar aqui
+          SSL_read(ssl, buffer, MSGSIZE);
+          original_file_time = atol(buffer); // TODO nao usar atoi? atol? outras funcoes mais seguras?
+          //valread = SSL_read(ssl, &original_file_time, sizeof(time_t));
+          //original_file_time = ntohl(original_file_time);
 
           // Search for file in user's list of files
           for(file_i = 0; file_i < MAXFILES; file_i++) {

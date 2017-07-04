@@ -281,7 +281,8 @@ void receive_file(char *file) {
 void send_file(char * file) {
     char file_path[256];
     struct stat st;
-    uint32_t length_converted, time_converted;
+    uint32_t time_converted;
+    char buffer[MSGSIZE] = {0};
 
     sprintf(file_path, "%s/%s", user_sync_dir_path, file);
 
@@ -297,18 +298,19 @@ void send_file(char * file) {
             SSL_write(ssl, TRANSMISSION_CONFIRM, MSGSIZE);
 
             // Send file size to client
-            length_converted = htonl(st.st_size);
-            SSL_write(ssl, &length_converted, sizeof(length_converted));
+            sprintf(buffer, "%d", st.st_size); // TODO integer? long?
+            SSL_write(ssl, buffer, MSGSIZE);
 
+            // FIXME TODO Ajeitar aqui!!!! nao ta enviando tamanho fixo. tem problema? se sei quanto vai chgar..
             // Read data from file and send it
             while (1) {
-                // First read file in chunks of 1024 bytes
-                unsigned char buff[1024] = {0};
+                // First read file in chunks
+                unsigned char buff[MSGSIZE] = {0};
                 int nread = fread(buff, 1, sizeof(buff), fp);
 
                 // If read was success, send data.
                 if (nread > 0) {
-                    SSL_write(ssl, buff, nread);
+                    SSL_write(ssl, buff, MSGSIZE);
                 }
 
                 // Either there was error, or reached end of file
@@ -325,8 +327,8 @@ void send_file(char * file) {
         fclose(fp);
 
         // Send file modification time
-        time_converted = htonl(st.st_mtime);
-        SSL_write(ssl, &time_converted, sizeof(time_converted));
+        sprintf(buffer, "%ld", st.st_mtime); // TODO integer? long?
+        SSL_write(ssl, buffer, MSGSIZE);
     } else {
         printf("File doesn't exist!\n");
         SSL_write(ssl, TRANSMISSION_CANCEL, MSGSIZE);
@@ -383,7 +385,7 @@ void list_files() {
     char filename_string[MAXNAME];
     int i;
     char buffer[MSGSIZE] = {0};
-    uint32_t nList = 0, nListConverted;
+    uint32_t nList = 0;
 
     printf("<~ %s requested LIST\n", username);
 
@@ -394,8 +396,6 @@ void list_files() {
         if (pClientEntry->file_info[i].size != FREE_FILE_SIZE)
             nList += strlen(pClientEntry->file_info[i].name) + 1;
     }
-    //nListConverted = htonl(nList);
-    //sprintf(buffer, "%d", nListConverted);
     sprintf(buffer, "%d", nList); // TODO integer? long?
     SSL_write(ssl, buffer, MSGSIZE);
 
