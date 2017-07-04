@@ -19,15 +19,22 @@
 
 // TODO colocar mutex no frontend!!
 
-__thread char username[MAXNAME];
-__thread int sock;
-char primary_host[256];
+char primary_host[20];
 int primary_port = 0;
+REPLICATION_SERVER_t replication_servers[MAXSERVERS];
+FRONTEND_CLIENT_t clients[MAXCLIENTS];
+
+
 int primary_sock;
 SSL *ssl, *ssl_cls, *primary_ssl, *primary_ssl_sync; // TODO conferir se ta certo. Não deveria ser exclusivo da thread? pq aí caso tenha mais de um usuario ao mesmo tempo pode acabar confundindo os sockets...?
 const SSL_METHOD *method_ssl;
 SSL_CTX *ctx;
-FRONTEND_CLIENT_t clients[MAXCLIENTS];
+
+
+__thread char username[MAXNAME];
+__thread int sock;
+
+// TODO confirmar se conexao com servidores funcionou e informar quantos backups estao sendo usados
 
 int main(int argc, char * argv[]) {
     struct sockaddr_in address;
@@ -40,9 +47,6 @@ int main(int argc, char * argv[]) {
         return 1;
     }
 
-    strcpy(primary_host, argv[2]);
-    primary_port = atoi(argv[3]);
-
     // Set userid to FREE_CLIENT_SLOT_USERID for all the clients, so we can check if a slot is free later
     for (i = 0; i < MAXCLIENTS; i++) {
         strcpy(clients[i].userid, FREE_CLIENT_SLOT_USERID);
@@ -50,6 +54,12 @@ int main(int argc, char * argv[]) {
         clients[i].devices[1] = NULL;
         clients[i].devices_server[0] = NULL;
         clients[i].devices_server[1] = NULL;
+    }
+
+    // Set userid to FREE_CLIENT_SLOT_USERID for all the clients, so we can check if a slot is free later
+    for (i = 0; i < MAXSERVERS; i++) {
+        strcpy(replication_servers[i].ip, argv[2+2*i]);
+        replication_servers[i].port = atoi(argv[3+2*i]);
     }
 
     // Initialize SSL
@@ -63,13 +73,21 @@ int main(int argc, char * argv[]) {
       abort();
     }
 
-    port = atoi(argv[1]);
-    printf("FrontEnd started on port %d\n", port);
-
     // Load SSL certificates
     SSL_CTX_use_certificate_file(ctx, "certificates/CertFile.pem", SSL_FILETYPE_PEM);
     SSL_CTX_use_PrivateKey_file(ctx, "certificates/KeyFile.pem", SSL_FILETYPE_PEM);
 
+    port = atoi(argv[1]);
+    printf("FrontEnd started on port %d\n", port);
+
+    // TODO tentar conectar em um dos servidores, e caso dÊ tudo certo definir
+    // ele como primario. Caso nao consiga conectar com nenhum do servidores, encerra (avisa o cliente?_
+
+    // Set values global used for identifying primary server
+    strcpy(primary_host, replication_servers[0].ip);
+    primary_port = replication_servers[0].port;
+
+    // TODO conexao inicial tá sem SSL? deveria ter?
     // Creating socket file descriptor
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("socket failed");
