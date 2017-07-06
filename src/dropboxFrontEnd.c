@@ -18,33 +18,39 @@
 #include "../include/dropboxFrontEnd.h"
 
 // TODO colocar mutex no frontend?
+// TODO mensagem de 2 usuarios conectados nao ta aparecendo..como identificar?
+// FIXME parece que quando o mesmo cliente loga em 2 dispositivos, as requisicoes de envio funcionam, mas o primeiro dispositivo para de receber resposta
+// TODO tem que fazer toods frontends conectarem ao mesmo primario. como?
 
-__thread char username[MAXNAME];
-__thread int sock;
+__thread char username[MAXNAME]; // TODO thread ou global?
+__thread int sock; // TODO inutil?
 char primary_host[20];
 int primary_port = 0;
 REPLICATION_SERVER_t replication_servers[MAXSERVERS];
-FRONTEND_CLIENT_t clients[MAXCLIENTS];
-
 
 int primary_sock;
-SSL *ssl, *ssl_cls, *primary_ssl, *primary_ssl_sync; // TODO conferir se ta certo. Não deveria ser exclusivo da thread? pq aí caso tenha mais de um usuario ao mesmo tempo pode acabar confundindo os sockets...?
+SSL *ssl, *ssl_cls, *primary_ssl, *primary_ssl_sync;
 const SSL_METHOD *method_ssl;
 SSL_CTX *ctx;
 
 int main(int argc, char * argv[]) {
     struct sockaddr_in address;
-    int server_fd, new_socket, port, addrlen;
+    int server_fd, new_socket, port, addrlen, i;
 
-    // REVIEW possibilidade de ter menos de 3? Possibilidade de rodar mais de um server na mesma maquina? (Sem vm).
+    // REVIEW possibilidade de ter menos de 3? Possibilidade de rodar mais de um server na mesma maquina? (Sem vm). se botar só um servidor, sem porta, dá pau
     // Check number of parameters
     if (argc < 2) {
         printf("Usage: %s <front end port> <primary server ip> <primary server port> <backup server 1 ip> <backup server 1 port>  <backup server 2 ip> <backup server 2 port>\n", argv[0]);
         return 1;
     }
 
-    strcpy(primary_host, argv[2]);
-    primary_port = atoi(argv[3]);
+    // Set replication servers
+    for (i = 0; i < MAXSERVERS; i++) {
+        if (3+2*i <= argc){
+            strcpy(replication_servers[i].ip, argv[2+2*i]);
+            replication_servers[i].port = atoi(argv[3+2*i]);
+        }
+    }
 
     // Initialize SSL
     SSL_library_init();
@@ -57,8 +63,6 @@ int main(int argc, char * argv[]) {
       abort();
     }
 
-    printf("FrontEnd started on port %d\n", port);
-
     // Load SSL certificates
     SSL_CTX_use_certificate_file(ctx, "certificates/FrontEndCertFile.pem", SSL_FILETYPE_PEM);
     SSL_CTX_use_PrivateKey_file(ctx, "certificates/FrontEndKeyFile.pem", SSL_FILETYPE_PEM);
@@ -66,14 +70,10 @@ int main(int argc, char * argv[]) {
     port = atoi(argv[1]);
     printf("FrontEnd started on port %d\n", port);
 
-    // TODO tentar conectar em um dos servidores, e caso dÊ tudo certo definir
-    // ele como primario. Caso nao consiga conectar com nenhum do servidores, encerra (avisa o cliente?_
-
     // Set values global used for identifying primary server
     strcpy(primary_host, replication_servers[0].ip);
     primary_port = replication_servers[0].port;
 
-    // TODO conexao inicial tá sem SSL? deveria ter?
     // Creating socket file descriptor
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("socket failed");
@@ -97,7 +97,6 @@ int main(int argc, char * argv[]) {
     // Accept and incoming connection
     puts("Waiting for incoming connection...");
     addrlen = sizeof(struct sockaddr_in);
-    pthread_t thread_id;
     new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen);
     if(new_socket){
         // Attach SSL
@@ -121,7 +120,7 @@ int main(int argc, char * argv[]) {
 
     printf("Client disconnected. Exiting frontend...\n" );
 
-    SSL_CTX_free(ctx); // release context // TODO is it called on graceful_exit? i guess no
+    SSL_CTX_free(ctx); // release context
 
     return 0;
 }
@@ -147,9 +146,7 @@ void *server_sync_handler(void *socket_desc) { // TODO Passar socket com SSL com
 }
 
 // Handle server response
-void *server_response_handler(void *socket_desc) { // TODO Passar socket com SSL como parametro?
-    // Get the socket descriptor
-    sock = *(int *) socket_desc;
+void *server_response_handler() {
     int read_size;
     char buffer[MSGSIZE];
     debug_printf("srh: esperando pra ler\n");
@@ -171,9 +168,10 @@ void *client_server_handler() {
     struct sockaddr_in addr;
     int server_fd_cls, new_socket_cls;
     struct sockaddr_in address_cls;
-    uint16_t port_converted, primary_sync_port;
+    uint16_t primary_sync_port;
 
     // Get socket addr and client IP
+    // TODO isso nao ta fazendo nada?
     socklen_t addr_size = sizeof(struct sockaddr_in);
     getpeername(sock, (struct sockaddr *)&addr, &addr_size);
     strcpy(client_ip, inet_ntoa(addr.sin_addr));
