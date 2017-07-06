@@ -17,6 +17,8 @@
 #include <openssl/err.h>
 #include "../include/dropboxServer.h"
 
+// TODO as vezes ta aceitando um usuario conectar em mais de 2 dispositivos, e aí fica zoado
+
 __thread char username[MAXNAME], user_sync_dir_path[256];
 __thread int sock; // TODO remover?
 __thread CLIENT_t *pClientEntry; // pointer to client struct in list of clients
@@ -24,6 +26,9 @@ __thread SSL *ssl;
 SSL *ssl_cls; // TODO conferir se ta certo. Não deveria ser exclusivo da thread? pq aí caso tenha mais de um usuario ao mesmo tempo pode acabar confundindo os sockets...?
 const SSL_METHOD *method;
 SSL_CTX *ctx;
+
+REPLICATION_SERVER_t replication_servers[MAXSERVERS];
+int isPrimary = 0;
 
 pthread_mutex_t clientCreationLock = PTHREAD_MUTEX_INITIALIZER; // prevent concurrent login
 

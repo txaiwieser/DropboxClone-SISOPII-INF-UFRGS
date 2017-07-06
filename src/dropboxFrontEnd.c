@@ -17,9 +17,6 @@
 #include <openssl/err.h>
 #include "../include/dropboxFrontEnd.h"
 
-// TODO colocar mutex no frontend?
-// TODO mensagem de 2 usuarios conectados nao ta aparecendo..como identificar?
-// FIXME parece que quando o mesmo cliente loga em 2 dispositivos, as requisicoes de envio funcionam, mas o primeiro dispositivo para de receber resposta
 // TODO tem que fazer toods frontends conectarem ao mesmo primario. como?
 
 __thread char username[MAXNAME]; // TODO thread ou global?

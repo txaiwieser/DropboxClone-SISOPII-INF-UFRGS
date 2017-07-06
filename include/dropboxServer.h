@@ -1,6 +1,6 @@
 #include "dropboxUtil.h"
 
-#define MAXCLIENTS 20
+//#define MAXCLIENTS 20
 
 typedef struct client {
   pthread_mutex_t mutex; // user mutex

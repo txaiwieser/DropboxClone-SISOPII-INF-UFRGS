@@ -4,7 +4,7 @@
 #define MSGSIZE 512 // Method messages (DOWNLOAD filename, UPLOAD filename, PUSH filename, etc) length
 #define FREE_FILE_SIZE -1
 #define MAXDEVICES 2 // Maximum number of connected devices for each user
-
+#define MAXSERVERS 3
 
 // Both constants must have TRANSMISSION_MSG_SIZE characteres!
 #define TRANSMISSION_CONFIRM "OK"
@@ -18,6 +18,11 @@ typedef struct file_info {
   time_t last_modified; // refere-se a data da última modificação no arquivo
   int size; // indica o tamanho do arquivo, em bytes
 } FILE_INFO_t;
+
+typedef struct replication_server {
+  char ip[20];
+  int port;
+} REPLICATION_SERVER_t;
 
 SSL* connect_server(char *host, int port);
 SSL* start_server(char *host, int port);
