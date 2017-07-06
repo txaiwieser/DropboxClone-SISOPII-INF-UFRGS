@@ -19,8 +19,6 @@
 
 // TODO colocar mutex no frontend?
 
-__thread char username[MAXNAME];
-__thread int sock;
 char primary_host[20];
 int primary_port = 0;
 REPLICATION_SERVER_t replication_servers[MAXSERVERS];
@@ -31,6 +29,15 @@ int primary_sock;
 SSL *ssl, *ssl_cls, *primary_ssl, *primary_ssl_sync; // TODO conferir se ta certo. Não deveria ser exclusivo da thread? pq aí caso tenha mais de um usuario ao mesmo tempo pode acabar confundindo os sockets...?
 const SSL_METHOD *method_ssl;
 SSL_CTX *ctx;
+<<<<<<< HEAD
+=======
+
+
+__thread char username[MAXNAME];
+__thread int sock;
+
+// TODO confirmar se conexao com servidores funcionou e informar quantos backups estao sendo usados
+>>>>>>> 488332e4521b3b7e6d61d9d84b34134eebb1a751
 
 int main(int argc, char * argv[]) {
     struct sockaddr_in address;
@@ -43,8 +50,25 @@ int main(int argc, char * argv[]) {
         return 1;
     }
 
+<<<<<<< HEAD
     strcpy(primary_host, argv[2]);
     primary_port = atoi(argv[3]);
+=======
+    // Set userid to FREE_CLIENT_SLOT_USERID for all the clients, so we can check if a slot is free later
+    for (i = 0; i < MAXCLIENTS; i++) {
+        strcpy(clients[i].userid, FREE_CLIENT_SLOT_USERID);
+        clients[i].devices[0] = NULL;
+        clients[i].devices[1] = NULL;
+        clients[i].devices_server[0] = NULL;
+        clients[i].devices_server[1] = NULL;
+    }
+
+    // Set userid to FREE_CLIENT_SLOT_USERID for all the clients, so we can check if a slot is free later
+    for (i = 0; i < MAXSERVERS; i++) {
+        strcpy(replication_servers[i].ip, argv[2+2*i]);
+        replication_servers[i].port = atoi(argv[3+2*i]);
+    }
+>>>>>>> 488332e4521b3b7e6d61d9d84b34134eebb1a751
 
     // Initialize SSL
     SSL_library_init();
@@ -56,8 +80,6 @@ int main(int argc, char * argv[]) {
       ERR_print_errors_fp(stderr);
       abort();
     }
-
-    printf("FrontEnd started on port %d\n", port);
 
     // Load SSL certificates
     SSL_CTX_use_certificate_file(ctx, "certificates/FrontEndCertFile.pem", SSL_FILETYPE_PEM);
@@ -139,7 +161,7 @@ void *server_sync_handler(void *socket_desc) { // TODO Passar socket com SSL com
     while ((read_size = SSL_read(primary_ssl_sync, buffer, MSGSIZE)) > 0 ) {
         // end of string marker
         buffer[read_size] = '\0';
-        printf("RECEBI %d bytes: %s\n", read_size, buffer);
+        printf("RECEBI do servidor %d bytes: %s\n", read_size, buffer);
 
         SSL_write(ssl_cls, buffer, MSGSIZE);
         printf("enviei pro cliente cls\n");
@@ -277,7 +299,13 @@ void *client_server_handler() {
         printf("RECEBI do cliente %d bytes: %s\n", read_size, buffer);
 
         SSL_write(primary_ssl, buffer, MSGSIZE);
+<<<<<<< HEAD
+        printf("enviei\n");
+=======
         printf("enviei pro servidor\n");
+        // TODO ler quantos caracteres?
+        // TODO enviar pro servidor
+>>>>>>> 488332e4521b3b7e6d61d9d84b34134eebb1a751
     }
 
     return NULL;

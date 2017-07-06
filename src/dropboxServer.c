@@ -143,9 +143,9 @@ int main(int argc, char * argv[]) {
 
 // Send number of files to client and send PUSH for each file
 void sync_server() {
-    char method[MSGSIZE];
+    char method[MSGSIZE], buffer[MSGSIZE];
     int i, d;
-    uint16_t nList = 0, nListConverted;
+    uint16_t nList = 0;
 
     printf("<~ %s requested SYNC\n", username);
 
@@ -156,8 +156,8 @@ void sync_server() {
         if (pClientEntry->file_info[i].size != FREE_FILE_SIZE)
             nList ++;
     }
-    nListConverted = htons(nList);
-    SSL_write(ssl, &nListConverted, sizeof(nListConverted));
+    sprintf(buffer, "%d", nList);
+    SSL_write(ssl, buffer, MSGSIZE);
 
     // Find current device
     for(d = 0; d < MAXDEVICES; d++ ) {
@@ -204,14 +204,18 @@ void receive_file(char *file) {
 
     sprintf(file_path, "%s/%s", user_sync_dir_path, file);
 
+    // Send server time to client
+    SSL_read(ssl, buffer, MSGSIZE); // reads "TIME" request
+    send_time();
+
     // Receive file modification time
-    valread = SSL_read(ssl, &client_file_time, sizeof(client_file_time));
-    client_file_time = ntohl(client_file_time);
+    SSL_read(ssl, buffer, MSGSIZE);
+    client_file_time = atol(buffer); // TODO nao usar atoi? atol? outras funcoes mais seguras?
 
     // If file already exists and server's version is newer, it's not transfered.
     if((file_found >= 0) && (client_file_time < pClientEntry->file_info[file_found].last_modified)) {
         printf("Client file is older than server version\n");
-        SSL_write(ssl, TRANSMISSION_CANCEL, TRANSMISSION_MSG_SIZE);
+        SSL_write(ssl, TRANSMISSION_CANCEL, MSGSIZE);
         pthread_mutex_unlock(&pClientEntry->mutex);
         // Send server file to client
         for(i = 0; i < MAXDEVICES; i++ ) {
@@ -234,14 +238,17 @@ void receive_file(char *file) {
             SSL_write(ssl, TRANSMISSION_CONFIRM, MSGSIZE);
 
             // Receive file size
-            valread = SSL_read(ssl, &file_size, sizeof(file_size));
-            nLeft = ntohl(file_size);
-            printf("sync_server: file_size=%ud nLeft_converted=%ud\n", file_size, nLeft);
+            SSL_read(ssl, buffer, MSGSIZE);
+            nLeft = atoi(buffer); // TODO nao usar atoi?
+            file_size = nLeft;
+
+            debug_printf("Buffer:%s file_size: %d / nLeft = %d\n", buffer, file_size, nLeft);
 
             // Receive data in chunks
-            while (nLeft > 0 && (valread = SSL_read(ssl, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
-                fwrite(buffer, 1, valread, fp);
-                nLeft -= valread;
+            while (nLeft > 0 && (valread = SSL_read(ssl, buffer, sizeof(buffer))) > 0) {
+                fwrite(buffer, 1, MIN(nLeft,valread), fp);
+                nLeft -= MIN(nLeft,valread);
+                debug_printf("valread: %d / nLeft = %d\n", valread, nLeft);
             }
             if (valread < 0) {
                 printf("\n Read Error \n");
@@ -281,7 +288,6 @@ void receive_file(char *file) {
 void send_file(char * file) {
     char file_path[256];
     struct stat st;
-    uint32_t time_converted;
     char buffer[MSGSIZE] = {0};
 
     sprintf(file_path, "%s/%s", user_sync_dir_path, file);
@@ -307,6 +313,7 @@ void send_file(char * file) {
                 // First read file in chunks
                 unsigned char buff[MSGSIZE] = {0};
                 int nread = fread(buff, 1, sizeof(buff), fp);
+                buff[nread] = '\0';
 
                 // If read was success, send data.
                 if (nread > 0) {
@@ -411,11 +418,12 @@ void list_files() {
 }
 
 void send_time() {
+    char buffer[MSGSIZE];
     printf("<~ %s requested TIME\n", username);
     // Send current time
     uint32_t current_time = time(NULL);
-    current_time = htonl(current_time);
-    SSL_write(ssl, &current_time, sizeof(current_time));
+    sprintf(buffer, "%ld", current_time);
+    SSL_write(ssl, buffer, MSGSIZE);
 }
 
 void free_device() {
@@ -456,7 +464,7 @@ void *connection_handler(void *socket_desc) {
     sock = *(int *) socket_desc;
     int read_size, i, n, device_to_use, addrlen_cls;
     int *nullReturn = NULL;
-    char file_path[256], client_ip[20], client_message[MSGSIZE];
+    char file_path[256], client_ip[20], client_message[MSGSIZE], buffer[MSGSIZE];
     struct sockaddr_in addr;
     struct tailq_entry *client_node, *tmp_client_node;
     struct dirent **namelist;
@@ -585,8 +593,8 @@ void *connection_handler(void *socket_desc) {
     }
 
     // Send port to the client
-    port_converted = address_cls.sin_port;
-    SSL_write(ssl, &port_converted, sizeof(port_converted));
+    sprintf(buffer, "%d", ntohs(address_cls.sin_port)); // TODO integer? long?
+    SSL_write(ssl, buffer, MSGSIZE);
 
     debug_printf("Socket CLS: %d\n", ntohs(port_converted));
 

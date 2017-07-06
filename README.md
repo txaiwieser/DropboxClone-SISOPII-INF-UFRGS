@@ -13,6 +13,7 @@
 - [ ] Testar muito bem sincronização de relógio!
 - [ ] TODOs no código
 - [ ] Talvez em alguns lugares da cliente em vez de ver se arquivo existe usando stat poderia ver se existe na estrutura.
+- [ ] Ver se os tipos sao adequados em todos os atoi(), write, read..
 
 ## Anotações para relatório etapa 2
 - usamos TLS1.2
