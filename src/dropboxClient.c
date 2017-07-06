@@ -59,22 +59,12 @@ int getLogicalTime(void){
 void send_file(char *file) {
     struct stat st;
     char buffer[MSGSIZE] = {0}, method[MSGSIZE];
-    int valread, file_i, found_file = 0;
+    int valread, file_i, file_found = -1, first_free_index = -1;
+    time_t file_mtime;
 
     pthread_mutex_lock(&fileOperationMutex);
 
-    // Search for file in user's list of files
-    for(file_i = 0; file_i < MAXFILES; file_i++) {
-        if(strcmp(client_files[file_i].name, file) == 0) {
-            found_file = 1;
-            break;
-        }
-    }
-
-    // TODO trocar condicao? confirmar se o funcionamento ta adequado
-
-    if (!found_file){
-        stat(file, &st);
+    if (stat(file, &st) == 0 && S_ISREG(st.st_mode)) { // If file exists
         FILE *fp = fopen(file,"rb");
         if (fp == NULL) {
             printf("Couldn't open the file\n");
@@ -89,8 +79,34 @@ void send_file(char *file) {
             sprintf(buffer, "%d", getLogicalTime()); // TODO integer? long?
             debug_printf("buffer = %d\n", buffer);
             SSL_write(ssl, buffer, MSGSIZE);
+            file_mtime = atoi(buffer);
 
             debug_printf("vou ler\n");
+
+            // Search for file in user's list of files
+            for(file_i = 0; file_i < MAXFILES; file_i++) {
+                if(strcmp(client_files[file_i].name, basename(file)) == 0) {
+                    file_found = file_i;
+                    break;
+                }
+            }
+
+            // Find the next free slot in user's list of files
+            for(file_i = 0; file_i < MAXFILES; file_i++) {
+                if(client_files[file_i].size == FREE_FILE_SIZE && first_free_index == -1)
+                    first_free_index = file_i;
+            }
+
+            // If file already exists on client file list, update it. Otherwise, insert it.
+            if(file_found >= 0) {
+                client_files[file_found].size = st.st_size;
+                client_files[file_found].last_modified = file_mtime;
+            } else {
+                debug_printf("basename(file): %s", basename(file));
+                strcpy(client_files[first_free_index].name, basename(file));
+                client_files[first_free_index].size = st.st_size;
+                client_files[first_free_index].last_modified = file_mtime;
+            }
 
             // Detect if file was created and local version is newer than server version, so file must be transfered
             valread = SSL_read(ssl, buffer, MSGSIZE);
@@ -258,6 +274,7 @@ void delete_local_file(char *file) {
     // Search for file in user's list of files
     for(file_i = 0; file_i < MAXFILES; file_i++) {
         // Stop if it is found
+        debug_printf("client_files[file_i].name: %s\n", client_files[file_i].name);
         if(strcmp(client_files[file_i].name, file) == 0) {
             found_file = 1;
             break;
@@ -293,50 +310,6 @@ void delete_local_file(char *file) {
     pthread_mutex_unlock(&fileOperationMutex);
 };
 
-// Save list of files into user_sync_dir_path/.dropboxfiles
-void save_list_of_files() {
-    // TODO Autosave every x seconds? or maybe everytime there's a file change?
-    struct dirent **namelist;
-    int n, i;
-    FILE *fp;
-    struct stat st;
-    char filepath[MAXNAME], stfpath[MAXNAME];
-    sprintf(filepath, "%s/.dropboxfiles", user_sync_dir_path);
-
-    pthread_mutex_lock(&fileOperationMutex);
-
-    fp = fopen(filepath, "w");
-    if (NULL == fp) {
-        printf("Error opening file");
-    } else {
-        n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
-
-        if (n > 2) { // Starting in i=2, it ignores '.' and '..'
-            for (i = 2; i < n; i++) {
-                sprintf(stfpath, "%s/%s", user_sync_dir_path, namelist[i]->d_name);
-                stat(stfpath, &st);
-                if(namelist[i]->d_name[0] != '.' && !(st.st_mode & S_IFDIR)) { // If it's a file and it's not hidden
-                    // Save filename
-                    fwrite(namelist[i]->d_name, strlen(namelist[i]->d_name), 1, fp);
-                    fwrite("\n", 1, 1, fp);
-                    // and timestamp
-                    struct tm *ptm = gmtime(&st.st_mtime);
-                    char buf[256];
-                    strftime(buf, sizeof buf, "%F %T", ptm);
-                    fwrite(buf, strlen(buf), 1, fp);
-                    fwrite("\n", 1, 1, fp);
-
-                    free(namelist[i]);
-                }
-            }
-        }
-    }
-    debug_printf("[Closing .dropboxfiles]\n");
-    fclose (fp);
-
-    pthread_mutex_unlock(&fileOperationMutex);
-}
-
 void cmdList() {
     int valread;
     uint32_t nLeft;
@@ -368,7 +341,6 @@ void cmdMan() {
 };
 
 void cmdExit() {
-    save_list_of_files();
     close_connection();
 }
 
@@ -384,58 +356,6 @@ void sync_client() {
     SSL_read(ssl, buffer, MSGSIZE);
     sync_files_left = atoi(buffer); // TODO nao usar atoi? atol? outras funcoes mais seguras?
     original_sync_files_left = sync_files_left;
-
-    /* TODO Sync modifications since last logout
-
-    FILE *fp;
-    struct stat st;
-    char filepath[MAXNAME], filename[MAXNAME], buf[256];
-    sprintf(filepath, "%s/.dropboxfiles", user_sync_dir_path);
-
-    // Open .dropboxfiles if it exists
-    if (stat(filepath, &st) == 0) {
-        fp = fopen(filepath, "r");
-        if (NULL == fp) {
-            printf("Error opening file");
-        } else {
-            // Read filenames with timestamps
-            while(fgets(filename, sizeof(filename), fp)) {
-                // Remove \n at end of string
-                size_t ln = strlen(filename)-1;
-                if (filename[ln] == '\n')
-                    filename[ln] = '\0';
-
-                fgets(buf, sizeof(buf), fp);
-                // Converting from string to time_t
-                struct tm tm;
-                strptime(buf, "%F %T", &tm);
-                //time_t t = mktime(&tm);
-
-                debug_printf("File %s modified %s", filename, buf);
-            }
-            // Compare with server and then sync.
-        }
-        fclose(fp);
-
-        If a file listed on .dropboxfiles doesn't exist anymore,
-        user deleted it. So, delete it on server and other devices too.
-        delete_server_file("filename");
-
-        If a file listed on .dropboxfiles exists locally, but not on server,
-        it means it was deleted by another device. So, delete it locally (without propagating to server).
-        delete_local_file("filename");
-
-        If there's a file that isn't listed on .dropboxfiles, it was created after
-        last sync. So, upload it to the server.
-        send_file("filename");
-
-        If a file is listed on .dropboxfiles, exists locally and on server,
-        need to check what's the newer version, and update it on client or server.
-        if (localversion newer) send_file("filename");
-        else if (remoteversion newer) get_file("filename");
-
-        Any other case...?
-    }*/
 
     debug_printf("[Syncing done]\n");
     pthread_mutex_unlock(&fileOperationMutex);
@@ -599,7 +519,6 @@ void* server_listener(void* unused) {
     if (read_size == 0) {
         printf("Server disconnected. Closing connection...");
         close_connection();
-        save_list_of_files();
         exit(0);
     } else if (read_size == -1) {
         perror("recv failed");
