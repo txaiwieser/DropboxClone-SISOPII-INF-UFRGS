@@ -17,7 +17,7 @@
 #include <openssl/err.h>
 #include "../include/dropboxFrontEnd.h"
 
-// TODO colocar mutex no frontend!!
+// TODO colocar mutex no frontend?
 
 __thread char username[MAXNAME];
 __thread int sock;
@@ -27,13 +27,12 @@ int primary_sock;
 SSL *ssl, *ssl_cls, *primary_ssl, *primary_ssl_sync; // TODO conferir se ta certo. Não deveria ser exclusivo da thread? pq aí caso tenha mais de um usuario ao mesmo tempo pode acabar confundindo os sockets...?
 const SSL_METHOD *method_ssl;
 SSL_CTX *ctx;
-FRONTEND_CLIENT_t clients[MAXCLIENTS];
 
 int main(int argc, char * argv[]) {
     struct sockaddr_in address;
-    int server_fd, new_socket, port, addrlen, i;
+    int server_fd, new_socket, port, addrlen;
 
-    // REVIEW possibilidade de ter menos de 3? Possibilidade de rodar mais de um server na mesma maquina? (Sem vm)
+    // REVIEW possibilidade de ter menos de 3? Possibilidade de rodar mais de um server na mesma maquina? (Sem vm).
     // Check number of parameters
     if (argc < 2) {
         printf("Usage: %s <front end port> <primary server ip> <primary server port> <backup server 1 ip> <backup server 1 port>  <backup server 2 ip> <backup server 2 port>\n", argv[0]);
@@ -42,15 +41,6 @@ int main(int argc, char * argv[]) {
 
     strcpy(primary_host, argv[2]);
     primary_port = atoi(argv[3]);
-
-    // Set userid to FREE_CLIENT_SLOT_USERID for all the clients, so we can check if a slot is free later
-    for (i = 0; i < MAXCLIENTS; i++) {
-        strcpy(clients[i].userid, FREE_CLIENT_SLOT_USERID);
-        clients[i].devices[0] = NULL;
-        clients[i].devices[1] = NULL;
-        clients[i].devices_server[0] = NULL;
-        clients[i].devices_server[1] = NULL;
-    }
 
     // Initialize SSL
     SSL_library_init();
@@ -67,8 +57,8 @@ int main(int argc, char * argv[]) {
     printf("FrontEnd started on port %d\n", port);
 
     // Load SSL certificates
-    SSL_CTX_use_certificate_file(ctx, "certificates/CertFile.pem", SSL_FILETYPE_PEM);
-    SSL_CTX_use_PrivateKey_file(ctx, "certificates/KeyFile.pem", SSL_FILETYPE_PEM);
+    SSL_CTX_use_certificate_file(ctx, "certificates/FrontEndCertFile.pem", SSL_FILETYPE_PEM);
+    SSL_CTX_use_PrivateKey_file(ctx, "certificates/FrontEndKeyFile.pem", SSL_FILETYPE_PEM);
 
     // Creating socket file descriptor
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
@@ -91,10 +81,11 @@ int main(int argc, char * argv[]) {
     }
 
     // Accept and incoming connection
-    puts("Waiting for incoming connections...");
+    puts("Waiting for incoming connection...");
     addrlen = sizeof(struct sockaddr_in);
     pthread_t thread_id;
-    while ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen))) {
+    new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen);
+    if(new_socket){
         // Attach SSL
         ssl = SSL_new(ctx);
         SSL_set_fd(ssl, new_socket);
@@ -106,31 +97,27 @@ int main(int argc, char * argv[]) {
 
         puts("Connection accepted");
 
-        if (pthread_create(&thread_id, NULL, client_server_handler, (void *) &new_socket) < 0) {
-            perror("could not create thread");
-            return 1;
-        } // TODO Passar socket com SSL como parametro?
-        // Now join the thread, so that we dont terminate before the thread
-        // pthread_join(thread_id, NULL);
+        client_server_handler();
+
         puts("Handler assigned");
-    }
-    if (new_socket < 0) {
+    } else if (new_socket < 0) {
         perror("accept failed");
         return 1;
     }
+
+    printf("Client disconnected. Exiting frontend...\n" );
 
     SSL_CTX_free(ctx); // release context // TODO is it called on graceful_exit? i guess no
 
     return 0;
 }
 
+// TODO melhorar msgs de logs e simplificar esse frontend
 
 // Handle sync connection from server to client
 void *server_sync_handler(void *socket_desc) { // TODO Passar socket com SSL como parametro?
     // Get the socket descriptor
     sock = *(int *) socket_desc;
-    // TODO setar device_to_use d eacordo e user_id
-    int device_to_use = 0, user_id = 0;
     int read_size;
     char buffer[MSGSIZE];
     debug_printf("ssh: esperando pra ler\n");
@@ -140,10 +127,8 @@ void *server_sync_handler(void *socket_desc) { // TODO Passar socket com SSL com
         buffer[read_size] = '\0';
         printf("RECEBI %d bytes: %s\n", read_size, buffer);
 
-        SSL_write(clients[user_id].devices_server[device_to_use], buffer, MSGSIZE);
+        SSL_write(ssl_cls, buffer, MSGSIZE);
         printf("enviei pro cliente cls\n");
-        // TODO ler quantos caracteres?
-        // TODO enviar pro servidor
     }
 }
 
@@ -151,8 +136,6 @@ void *server_sync_handler(void *socket_desc) { // TODO Passar socket com SSL com
 void *server_response_handler(void *socket_desc) { // TODO Passar socket com SSL como parametro?
     // Get the socket descriptor
     sock = *(int *) socket_desc;
-    // TODO setar device_to_use d eacordo e user_id
-    int device_to_use = 0, user_id = 0;
     int read_size;
     char buffer[MSGSIZE];
     debug_printf("srh: esperando pra ler\n");
@@ -162,19 +145,14 @@ void *server_response_handler(void *socket_desc) { // TODO Passar socket com SSL
         buffer[read_size] = '\0';
         printf("RECEBI %d bytes: %s\n", read_size, buffer);
 
-        SSL_write(clients[user_id].devices[device_to_use], buffer, MSGSIZE);
+        SSL_write(ssl, buffer, MSGSIZE);
         printf("enviei pro cliente\n");
-        // TODO ler quantos caracteres?
-        // TODO enviar pro servidor
     }
 }
 
-
 // Handle connection from client to server
-void *client_server_handler(void *socket_desc) {
-    // Get the socket descriptor
-    sock = *(int *) socket_desc;
-    int addrlen_cls, read_size, valread, user_id, uid, device_to_use;
+void *client_server_handler() {
+    int addrlen_cls, read_size, valread;
     char client_ip[20], buffer[MSGSIZE];
     struct sockaddr_in addr;
     int server_fd_cls, new_socket_cls;
@@ -239,40 +217,6 @@ void *client_server_handler(void *socket_desc) {
         ERR_print_errors_fp(stderr);
     }
 
-
-    // Search for user in list of clients
-    for(user_id = 0; user_id < MAXCLIENTS; user_id++){
-        if(strcmp(clients[user_id].userid, username) == 0){
-          break;
-        }
-    }
-
-    // If found
-    if(user_id != MAXCLIENTS){
-        // If it's connected only in one device, connect the second device.
-        device_to_use = (clients[user_id].devices[0] < 0) ? 0 : 1;
-        clients[user_id].devices[device_to_use] = ssl;
-        clients[user_id].devices_server[device_to_use] = ssl_cls;
-        debug_printf("device_to_use: %d\n", device_to_use);
-    } else {
-      // Insert in first free slot
-      for(uid = 0; uid < MAXCLIENTS; uid++) {
-          if(strcmp(clients[uid].userid, FREE_CLIENT_SLOT_USERID) == 0){
-              strcpy(clients[uid].userid, username);
-              device_to_use = 0;
-              clients[uid].devices[device_to_use] = ssl;
-              clients[uid].devices_server[device_to_use] = ssl_cls;
-              user_id = uid;
-              break;
-          }
-      }
-      // If there's no slot free
-      if(uid == MAXCLIENTS){
-          return 0; // TODO colocar msg de erro dizendo q passou do limite de usuarios
-      }
-    }
-    // TODO quando cliente é desconectado setar username para 'avaialble'
-
     // Connect to server
     primary_ssl = connect_server(primary_host, primary_port);
     if (primary_ssl == NULL) {
@@ -301,8 +245,6 @@ void *client_server_handler(void *socket_desc) {
         return NULL;
     }
 
-    // TODO Save SSL socket (for connecting to server) in client structure? para funcioanr com multiplos clientes...
-
     // Create thread for listening server sync
     pthread_t thread_id, thread_id2;
     if (pthread_create(&thread_id, NULL, server_response_handler, (void *) &primary_ssl) < 0) {
@@ -314,19 +256,15 @@ void *client_server_handler(void *socket_desc) {
         return 1;
     }
 
-
     // Keep listening to client requests
-    while ((read_size = SSL_read(clients[user_id].devices[device_to_use], buffer, MSGSIZE)) > 0 ) {
+    while ((read_size = SSL_read(ssl, buffer, MSGSIZE)) > 0 ) {
         // end of string marker
         buffer[read_size] = '\0';
         printf("RECEBI %d bytes: %s\n", read_size, buffer);
 
         SSL_write(primary_ssl, buffer, MSGSIZE);
         printf("enviei\n");
-        // TODO ler quantos caracteres?
-        // TODO enviar pro servidor
     }
-
 
     return NULL;
 }

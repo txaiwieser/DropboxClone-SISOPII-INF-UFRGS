@@ -81,8 +81,8 @@ int main(int argc, char * argv[]) {
     sigaction(SIGINT, &action, NULL);
 
     // Load SSL certificates
-    SSL_CTX_use_certificate_file(ctx, "certificates/CertFile.pem", SSL_FILETYPE_PEM);
-    SSL_CTX_use_PrivateKey_file(ctx, "certificates/KeyFile.pem", SSL_FILETYPE_PEM);
+    SSL_CTX_use_certificate_file(ctx, "certificates/ServerCertFile.pem", SSL_FILETYPE_PEM);
+    SSL_CTX_use_PrivateKey_file(ctx, "certificates/ServerKeyFile.pem", SSL_FILETYPE_PEM);
 
     // Creating socket file descriptor
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
@@ -547,8 +547,6 @@ void *connection_handler(void *socket_desc) {
     pClientEntry = &(client_node->client_entry);
 
     pthread_mutex_unlock(&clientCreationLock);
-
-    printf("aaaaaaaaaaaaaaaaaaaaaaaaaalll\n");
 
     // Send "OK" to confirm connection was accepted.
     SSL_write(ssl, TRANSMISSION_CONFIRM, MSGSIZE);

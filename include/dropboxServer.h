@@ -1,5 +1,7 @@
 #include "dropboxUtil.h"
 
+#define MAXCLIENTS 20
+
 typedef struct client {
   pthread_mutex_t mutex; // user mutex
   SSL *devices[MAXDEVICES]; // associado aos dispositivos do usuário
