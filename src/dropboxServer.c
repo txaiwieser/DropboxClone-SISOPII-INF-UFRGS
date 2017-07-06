@@ -18,9 +18,10 @@
 #include "../include/dropboxServer.h"
 
 __thread char username[MAXNAME], user_sync_dir_path[256];
-__thread int sock;
+__thread int sock; // TODO remover?
 __thread CLIENT_t *pClientEntry; // pointer to client struct in list of clients
-SSL *ssl, *ssl_cls; // TODO conferir se ta certo. Não deveria ser exclusivo da thread? pq aí caso tenha mais de um usuario ao mesmo tempo pode acabar confundindo os sockets...?
+__thread SSL *ssl;
+SSL *ssl_cls; // TODO conferir se ta certo. Não deveria ser exclusivo da thread? pq aí caso tenha mais de um usuario ao mesmo tempo pode acabar confundindo os sockets...?
 const SSL_METHOD *method;
 SSL_CTX *ctx;
 
@@ -123,7 +124,9 @@ int main(int argc, char * argv[]) {
 
         puts("Connection accepted");
 
-        if (pthread_create(&thread_id, NULL, connection_handler, (void *) &new_socket) < 0) {
+        debug_printf("SSL antes da thread: %d\n", ssl);
+
+        if (pthread_create(&thread_id, NULL, connection_handler, ssl) < 0) {
             perror("could not create thread");
             return 1;
         } // TODO Passar socket com SSL como parametro?
@@ -398,6 +401,7 @@ void list_files() {
 
     pthread_mutex_lock(&pClientEntry->mutex);
 
+    debug_printf("pClientEntry->userid: %s / pClientEntry->devices[0] = %d / pClientEntry->devices[1] = %d / SSL = %d\n", pClientEntry->userid, pClientEntry->devices[0], pClientEntry->devices[1], ssl);
     // Calculate number of files and send to client
     for (i = 0; i < MAXFILES; i++) {
         if (pClientEntry->file_info[i].size != FREE_FILE_SIZE)
@@ -461,7 +465,7 @@ void free_device() {
 // Handle connection for each client
 void *connection_handler(void *socket_desc) {
     // Get the socket descriptor
-    sock = *(int *) socket_desc;
+    ssl = socket_desc;
     int read_size, i, n, device_to_use, addrlen_cls;
     int *nullReturn = NULL;
     char file_path[256], client_ip[20], client_message[MSGSIZE], buffer[MSGSIZE];
@@ -470,10 +474,7 @@ void *connection_handler(void *socket_desc) {
     struct dirent **namelist;
     struct stat st;
 
-    // Get socket addr and client IP
-    socklen_t addr_size = sizeof(struct sockaddr_in);
-    getpeername(sock, (struct sockaddr *)&addr, &addr_size);
-    strcpy(client_ip, inet_ntoa(addr.sin_addr));
+    debug_printf("SSL: %d\n", ssl);
 
     debug_printf("server vai receber username\n");
 
