@@ -128,9 +128,7 @@ int main(int argc, char * argv[]) {
 // TODO melhorar msgs de logs e simplificar esse frontend
 
 // Handle sync connection from server to client
-void *server_sync_handler(void *socket_desc) { // TODO Passar socket com SSL como parametro?
-    // Get the socket descriptor
-    sock = *(int *) socket_desc;
+void *server_sync_handler() {
     int read_size;
     char buffer[MSGSIZE];
     debug_printf("ssh: esperando pra ler\n");
@@ -259,11 +257,11 @@ void *client_server_handler() {
 
     // Create thread for listening server sync
     pthread_t thread_id, thread_id2;
-    if (pthread_create(&thread_id, NULL, server_response_handler, (void *) &primary_ssl) < 0) {
+    if (pthread_create(&thread_id, NULL, server_response_handler, NULL) < 0) {
         perror("could not create thread");
         return NULL;
     }
-    if (pthread_create(&thread_id2, NULL, server_sync_handler, (void *) &primary_ssl_sync) < 0) {
+    if (pthread_create(&thread_id2, NULL, server_sync_handler, NULL) < 0) {
         perror("could not create thread");
         return NULL;
     }
