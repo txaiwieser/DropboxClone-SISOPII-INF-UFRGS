@@ -19,6 +19,8 @@
 
 // TODO as vezes ta aceitando um usuario conectar em mais de 2 dispositivos, e aí fica zoado
 
+// TODO Enviar mensagem dizendo que é o servidor conectando quando conectar com outros servidores
+
 __thread char username[MAXNAME], user_sync_dir_path[256];
 __thread int sock; // TODO remover?
 __thread CLIENT_t *pClientEntry; // pointer to client struct in list of clients
@@ -29,7 +31,7 @@ SSL_CTX *ctx;
 
 REPLICATION_SERVER_t replication_servers[MAXSERVERS];
 int isPrimary = 0;
-int isFirstConnection = 0;
+int isFirstConnection = 1;
 
 pthread_mutex_t clientCreationLock = PTHREAD_MUTEX_INITIALIZER; // prevent concurrent login
 
@@ -463,6 +465,46 @@ void free_device() {
     // pthread_mutex_unlock(&pClientEntry->mutex);
 }
 
+void connect_to_replication_servers(){
+    // TODO passar pros outros servidores caso seja o primario
+
+    int i, j;
+    char buffer[MSGSIZE] = {0}, serverinfo[120];
+
+    for(i = 0; i < MAXSERVERS; i++){
+        debug_printf("ofksaofks i=%d\n", i);
+        if(replication_servers[i].isAvailable){
+            replication_servers[i].socket = connect_server(replication_servers[i].ip, replication_servers[i].port);
+            // TODO criar threads para evitar que caso nao consiga conectar em um servidor, possa conectar nos outros
+            debug_printf("conectou no servidor i=%d socket=%d\n", i, replication_servers[i].socket);
+            // Tell server this connection is from a primary server
+            sprintf(buffer, "%s", CONNECTION_SERVER);
+            SSL_write(replication_servers[i].socket, buffer, MSGSIZE);
+            debug_printf("fasofksaofm\n");
+            // Check if it's server first connection
+            SSL_read(replication_servers[i].socket, buffer, MSGSIZE);
+            // If it is, send the list of servers
+            if (strncmp(buffer, CONNECTION_FIRST, CONNECTION_MSG_SIZE) == 0){
+                buffer[0] = '\0';
+                serverinfo[0] = '\0';
+
+                debug_printf("msg de first no %d\n", i);
+
+                for(j = 0; j < MAXSERVERS; j++){
+                    if(replication_servers[i].isAvailable){
+                        sprintf(serverinfo, "%s|%d|", replication_servers[i].ip, replication_servers[i].port);
+                        strcat(buffer, serverinfo);
+                    }
+                }
+                SSL_write(replication_servers[i].socket, buffer, MSGSIZE);
+            }
+
+            // Send username to server
+            SSL_write(replication_servers[i].socket, username, sizeof(username));
+        }
+    }
+}
+
 // Handle connection for each client
 void *connection_handler(void *socket_desc) {
     // Get the socket descriptor
@@ -479,11 +521,19 @@ void *connection_handler(void *socket_desc) {
     debug_printf("SSL: %d\n", ssl);
 
     // Send message to front end informing if it is the first connection
-    if (!isFirstConnection){
+    if (isFirstConnection){
+
+        // Read if connnection is from a frontend or a server
+        SSL_read(ssl, buffer, MSGSIZE);
+        if (strncmp(buffer, CONNECTION_FRONTEND, CONNECTION_FIRST_MSG_SIZE) == 0) {
+            isPrimary = 1;
+        }
+
+        debug_printf("Connection from a %s\n", buffer);
+
         sprintf(buffer, "%s", CONNECTION_FIRST);
         SSL_write(ssl, buffer, MSGSIZE);
-        isFirstConnection = 1;
-        isPrimary = 1; // TODO ajustar aqui! nao necessariamente vai ser o primario...
+        isFirstConnection = 0;
 
         // Read list of servers
         SSL_read(ssl, buffer, MSGSIZE);
@@ -590,8 +640,6 @@ void *connection_handler(void *socket_desc) {
     // Send "OK" to confirm connection was accepted.
     SSL_write(ssl, TRANSMISSION_CONFIRM, MSGSIZE);
 
-    printf("f5sa8904fas84f0as\n");
-
     // Criar socket
     int server_fd_cls, new_socket_cls;
     struct sockaddr_in address_cls;
@@ -630,7 +678,6 @@ void *connection_handler(void *socket_desc) {
     debug_printf("Socket CLS: %d\n", ntohs(port_converted));
 
     // Accept and incoming connection
-    // FIXME paramos aqui!
     addrlen_cls = sizeof(struct sockaddr_in);
     new_socket_cls = accept(server_fd_cls, (struct sockaddr *) &address_cls, (socklen_t *) &addrlen_cls);
     // TODO tratar retorno do accept?
@@ -647,6 +694,11 @@ void *connection_handler(void *socket_desc) {
 
     // Connect to client's server
     client_node->client_entry.devices_server[device_to_use] = ssl_cls;
+
+
+    if (isPrimary) {
+        connect_to_replication_servers();
+    }
 
     // Receive requests from client
     while ((read_size = SSL_read(ssl, client_message, MSGSIZE)) > 0 ) {

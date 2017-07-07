@@ -47,6 +47,7 @@ int main(int argc, char * argv[]) {
             strcpy(replication_servers[i].ip, inet_ntoa(*addr_list[0]));
             replication_servers[i].port = atoi(argv[3+2*i]);
             replication_servers[i].isAvailable = 1;
+            replication_servers[i].socket = NULL;
             /*
             int j;
             for(j = 0; addr_list[j] != NULL; j++) {
@@ -57,6 +58,7 @@ int main(int argc, char * argv[]) {
             strcpy(replication_servers[i].ip, "empty");
             replication_servers[i].port = 0;
             replication_servers[i].isAvailable = 0;
+            replication_servers[i].socket = NULL;
         }
     }
 
@@ -236,6 +238,10 @@ void *client_server_handler() {
     if (primary_ssl == NULL) {
         return NULL;
     }
+
+    // Tell server this connection is from a frontend
+    sprintf(buffer, "%s", CONNECTION_FRONTEND);
+    SSL_write(primary_ssl, buffer, MSGSIZE);
 
     // Check if it's server first connection
     SSL_read(primary_ssl, buffer, MSGSIZE);
