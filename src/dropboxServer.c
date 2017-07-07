@@ -281,11 +281,13 @@ void receive_file(char *file) {
             pthread_mutex_unlock(&pClientEntry->mutex);
 
             // Send file to other connected devices
-            for(i = 0; i < MAXDEVICES; i++ ) {
-                if(pClientEntry->devices[i] != NULL && pClientEntry->devices[i] != ssl) {
-                    printf("[PUSH %s to %s's device %d]\n", file, pClientEntry->userid, i);
-                    sprintf(method, "PUSH %s", file);
-                    SSL_write(pClientEntry->devices_server[i], method, sizeof(method));
+            if (isPrimary) {
+                for(i = 0; i < MAXDEVICES; i++ ) {
+                    if(pClientEntry->devices[i] != NULL && pClientEntry->devices[i] != ssl) {
+                        printf("[PUSH %s to %s's device %d]\n", file, pClientEntry->userid, i);
+                        sprintf(method, "PUSH %s", file);
+                        SSL_write(pClientEntry->devices_server[i], method, sizeof(method));
+                    }
                 }
             }
         }
@@ -381,17 +383,28 @@ void delete_file(char *file) {
         }
 
         // Delete file from other connected devices
-        for(i = 0; i < MAXDEVICES; i++ ) {
-            if(pClientEntry->devices[i] != NULL && pClientEntry->devices[i] != ssl) {
-                printf("[DELETE %s to %s's device %d]\n", file, pClientEntry->userid, i);
-                sprintf(method, "DELETE %s", file);
-                SSL_write(pClientEntry->devices_server[i], method, sizeof(method));
+        if (isPrimary) {
+            for(i = 0; i < MAXDEVICES; i++ ) {
+                if(pClientEntry->devices[i] != NULL && pClientEntry->devices[i] != ssl) {
+                    printf("[DELETE %s to %s's device %d]\n", file, pClientEntry->userid, i);
+                    sprintf(method, "DELETE %s", file);
+                    SSL_write(pClientEntry->devices_server[i], method, sizeof(method));
+                }
+            }
+            // TODO fazer a replicacao usando threads!!
+            for(i = 0; i < MAXSERVERS; i++ ) {
+                if(replication_servers[i].isAvailable) {
+                    printf("[DELETE %s to server %s:%d ]\n", file, replication_servers[i].ip, replication_servers[i].port);
+                    sprintf(method, "DELETE %s", file);
+                    SSL_write(replication_servers[i].socket, method, sizeof(method));
+                }
             }
         }
     } else {
         printf("File not found\n");
     }
     pthread_mutex_unlock(&pClientEntry->mutex);
+
 };
 
 void list_files() {
@@ -640,63 +653,62 @@ void *connection_handler(void *socket_desc) {
     // Send "OK" to confirm connection was accepted.
     SSL_write(ssl, TRANSMISSION_CONFIRM, MSGSIZE);
 
-    // Criar socket
-    int server_fd_cls, new_socket_cls;
-    struct sockaddr_in address_cls;
-    uint16_t port_converted;
+    if (isPrimary){
+        // Criar socket
+        int server_fd_cls, new_socket_cls;
+        struct sockaddr_in address_cls;
+        uint16_t port_converted;
 
-    // Creating socket file descriptor
-    if ((server_fd_cls = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
-        perror("socket failed");
-        exit(EXIT_FAILURE);
-    }
+        // Creating socket file descriptor
+        if ((server_fd_cls = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+            perror("socket failed");
+            exit(EXIT_FAILURE);
+        }
 
-    address_cls.sin_family = AF_INET;
-    address_cls.sin_addr.s_addr = INADDR_ANY;
-    address_cls.sin_port = 0; // auto assign port
+        address_cls.sin_family = AF_INET;
+        address_cls.sin_addr.s_addr = INADDR_ANY;
+        address_cls.sin_port = 0; // auto assign port
 
-    // Attach socket to the port
-    if (bind(server_fd_cls, (struct sockaddr *) &address_cls, sizeof(address_cls)) < 0) {
-        perror("bind failed");
-        exit(EXIT_FAILURE);
-    }
-    if (listen(server_fd_cls, 3) < 0) {
-        perror("listen");
-        exit(EXIT_FAILURE);
-    }
+        // Attach socket to the port
+        if (bind(server_fd_cls, (struct sockaddr *) &address_cls, sizeof(address_cls)) < 0) {
+            perror("bind failed");
+            exit(EXIT_FAILURE);
+        }
+        if (listen(server_fd_cls, 3) < 0) {
+            perror("listen");
+            exit(EXIT_FAILURE);
+        }
 
-    socklen_t len_cls = sizeof(address_cls);
-    if (getsockname(server_fd_cls, (struct sockaddr *)&address_cls, &len_cls) == -1) {
-        perror("getsockname");
-        exit(EXIT_FAILURE);
-    }
+        socklen_t len_cls = sizeof(address_cls);
+        if (getsockname(server_fd_cls, (struct sockaddr *)&address_cls, &len_cls) == -1) {
+            perror("getsockname");
+            exit(EXIT_FAILURE);
+        }
 
-    // Send port to the client
-    sprintf(buffer, "%d", ntohs(address_cls.sin_port)); // TODO integer? long?
-    SSL_write(ssl, buffer, MSGSIZE);
+        // Send port to the client
+        sprintf(buffer, "%d", ntohs(address_cls.sin_port)); // TODO integer? long?
+        SSL_write(ssl, buffer, MSGSIZE);
 
-    debug_printf("Socket CLS: %d\n", ntohs(port_converted));
+        debug_printf("Socket CLS: %d\n", ntohs(port_converted));
 
-    // Accept and incoming connection
-    addrlen_cls = sizeof(struct sockaddr_in);
-    new_socket_cls = accept(server_fd_cls, (struct sockaddr *) &address_cls, (socklen_t *) &addrlen_cls);
-    // TODO tratar retorno do accept?
-    debug_printf("ACEITOU CONEXAO\n");
+        // Accept and incoming connection
+        addrlen_cls = sizeof(struct sockaddr_in);
+        new_socket_cls = accept(server_fd_cls, (struct sockaddr *) &address_cls, (socklen_t *) &addrlen_cls);
+        // TODO tratar retorno do accept?
+        debug_printf("ACEITOU CONEXAO\n");
 
-    // Attach SSL
-    ssl_cls = SSL_new(ctx);
-    SSL_set_fd(ssl_cls, new_socket_cls);
+        // Attach SSL
+        ssl_cls = SSL_new(ctx);
+        SSL_set_fd(ssl_cls, new_socket_cls);
 
-    /* do SSL-protocol accept */
-    if ( SSL_accept(ssl_cls) == -1 ){
-        ERR_print_errors_fp(stderr);
-    }
+        /* do SSL-protocol accept */
+        if ( SSL_accept(ssl_cls) == -1 ){
+            ERR_print_errors_fp(stderr);
+        }
 
-    // Connect to client's server
-    client_node->client_entry.devices_server[device_to_use] = ssl_cls;
+        // Connect to client's server
+        client_node->client_entry.devices_server[device_to_use] = ssl_cls;
 
-
-    if (isPrimary) {
         connect_to_replication_servers();
     }
 
