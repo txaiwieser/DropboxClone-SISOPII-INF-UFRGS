@@ -211,9 +211,11 @@ void receive_file(char *file) {
 
     sprintf(file_path, "%s/%s", user_sync_dir_path, file);
 
-    // Send server time to client
-    SSL_read(ssl, buffer, MSGSIZE); // reads "TIME" request
-    send_time();
+    if (isPrimary) {
+        // Send server time to client
+        SSL_read(ssl, buffer, MSGSIZE); // reads "TIME" request
+        send_time();
+    }
 
     // Receive file modification time
     SSL_read(ssl, buffer, MSGSIZE);
@@ -234,7 +236,7 @@ void receive_file(char *file) {
         }
     } else {
         /* Create file where data will be stored */
-        FILE *fp;
+        FILE *fp, *fp2;
         fp = fopen(file_path, "wb");
         if (NULL == fp) {
             printf("Error opening file");
@@ -249,7 +251,7 @@ void receive_file(char *file) {
             nLeft = atoi(buffer); // TODO nao usar atoi?
             file_size = nLeft;
 
-            debug_printf("Buffer:%s file_size: %d / nLeft = %d\n", buffer, file_size, nLeft);
+            debug_printf("Buffer:%s file_size: %d / nLeft = %d / filepath = %s\n", buffer, file_size, nLeft, file_path);
 
             // Receive data in chunks
             while (nLeft > 0 && (valread = SSL_read(ssl, buffer, sizeof(buffer))) > 0) {
@@ -287,6 +289,61 @@ void receive_file(char *file) {
                         printf("[PUSH %s to %s's device %d]\n", file, pClientEntry->userid, i);
                         sprintf(method, "PUSH %s", file);
                         SSL_write(pClientEntry->devices_server[i], method, sizeof(method));
+                    }
+                }
+                // TODO fazer a replicacao usando threads!! essa funcao aqui ta super duplicada
+                for(i = 0; i < MAXSERVERS; i++ ) {
+                    if(replication_servers[i].isAvailable) {
+                        printf("[UPLOAD %s to server %s:%d ]\n", file, replication_servers[i].ip, replication_servers[i].port);
+                        sprintf(method, "UPLOAD %s", file);
+                        SSL_write(replication_servers[i].socket, method, sizeof(method));
+
+                        // Send file logical modification time
+                        sprintf(buffer, "%d", client_file_time); // TODO integer? long?
+                        SSL_write(replication_servers[i].socket, buffer, MSGSIZE);
+
+                        // Detect if file was created and local version is newer than server version, so file must be transfered
+                        valread = SSL_read(replication_servers[i].socket, buffer, MSGSIZE);
+                        debug_printf("filepath:%s file:%s\n", file_path, file);
+                        fp2 = fopen(file_path, "rb");
+                        if (NULL == fp2) {
+                            printf("Error opening file");
+                            SSL_write(replication_servers[i].socket, TRANSMISSION_CANCEL, MSGSIZE);
+                            //pthread_mutex_unlock(&pClientEntry->mutex);
+                        }
+                        debug_printf("leuuuuu\n");
+                        if (strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) == 0) {
+                            debug_printf("ooooo\n");
+                            // Send file size to replication server
+                            sprintf(buffer, "%d", file_size); // TODO integer? long?
+                            debug_printf("filesize: %s", buffer);
+                            SSL_write(replication_servers[i].socket, buffer, MSGSIZE);
+                            debug_printf("Enviou filesize para replicas");
+
+                            // Read data from file and send it
+                            while (1) {
+                                // First read file in chunks of 1024 bytes
+                                unsigned char buff[MSGSIZE] = {0};
+                                int nread = fread(buff, 1, sizeof(buff), fp2);
+                                buff[nread] = '\0';
+
+                                // If read was success, send data.
+                                if (nread > 0) {
+                                    SSL_write(replication_servers[i].socket, buff, MSGSIZE);
+                                }
+                                debug_printf("nread = %d\n", nread);
+                                // Either there was error, or reached end of file
+                                if (nread < sizeof(buff)) {
+                                    //if (feof(fp))
+                                    //    debug_printf("End of file\n");
+                                    if (ferror(fp2)) {
+                                        printf("Error reading\n");
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        fclose(fp2);
                     }
                 }
             }
@@ -350,6 +407,8 @@ void send_file(char * file) {
     }
     pthread_mutex_unlock(&pClientEntry->mutex);
 }
+
+
 
 void delete_file(char *file) {
     char file_path[256];
@@ -504,7 +563,7 @@ void connect_to_replication_servers(){
                 debug_printf("msg de first no %d\n", i);
 
                 for(j = 0; j < MAXSERVERS; j++){
-                    if(replication_servers[i].isAvailable){
+                    if(replication_servers[i].isAvailable && i!=j ){
                         sprintf(serverinfo, "%s|%d|", replication_servers[i].ip, replication_servers[i].port);
                         strcat(buffer, serverinfo);
                     }
