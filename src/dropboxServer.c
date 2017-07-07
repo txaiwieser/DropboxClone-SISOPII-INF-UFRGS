@@ -29,6 +29,7 @@ SSL_CTX *ctx;
 
 REPLICATION_SERVER_t replication_servers[MAXSERVERS];
 int isPrimary = 0;
+int isFirstConnection = 0;
 
 pthread_mutex_t clientCreationLock = PTHREAD_MUTEX_INITIALIZER; // prevent concurrent login
 
@@ -478,8 +479,29 @@ void *connection_handler(void *socket_desc) {
     struct tailq_entry *client_node, *tmp_client_node;
     struct dirent **namelist;
     struct stat st;
+    char *token;
 
     debug_printf("SSL: %d\n", ssl);
+
+    // Send message to front end informing if it is the first connection
+    if (!isFirstConnection){
+        sprintf(buffer, "%s", CONNECTION_FIRST);
+        SSL_write(ssl, buffer, MSGSIZE);
+        isFirstConnection = 1;
+
+        // Read list of servers
+        SSL_read(ssl, buffer, MSGSIZE);
+        token = strtok(buffer, "|");
+
+        while (token != NULL) {
+            debug_printf("token=> %s\n", token);
+            token = strtok(NULL, "|");
+        }
+
+    } else{
+        sprintf(buffer, CONNECTION_NOT_FIRST);
+        SSL_write(ssl, buffer, MSGSIZE);
+    }
 
     debug_printf("server vai receber username\n");
 

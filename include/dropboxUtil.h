@@ -11,6 +11,11 @@
 #define TRANSMISSION_CANCEL "ER"
 #define TRANSMISSION_MSG_SIZE 2
 
+// Both constants must have CONNECTION_MSG_SIZE characteres!
+#define CONNECTION_FIRST "FC"
+#define CONNECTION_NOT_FIRST "NF"
+#define CONNECTION_MSG_SIZE 2
+
 #define MIN(a,b) (a < b)? a : b
 
 typedef struct file_info {
@@ -22,6 +27,7 @@ typedef struct file_info {
 typedef struct replication_server {
   char ip[20];
   int port;
+  int isAvailable;
 } REPLICATION_SERVER_t;
 
 SSL* connect_server(char *host, int port);

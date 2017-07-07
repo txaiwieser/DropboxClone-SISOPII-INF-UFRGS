@@ -3,15 +3,11 @@
 #include <stdlib.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/queue.h>
-#include <dirent.h>
-#include <time.h>
-#include <utime.h>
 #include <pthread.h>
-#include <signal.h>
 #include <unistd.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -33,6 +29,8 @@ SSL_CTX *ctx;
 int main(int argc, char * argv[]) {
     struct sockaddr_in address;
     int server_fd, new_socket, port, addrlen, i;
+    struct hostent *he;
+    struct in_addr **addr_list;
 
     // REVIEW possibilidade de ter menos de 3? Possibilidade de rodar mais de um server na mesma maquina? (Sem vm). se botar só um servidor, sem porta, dá pau
     // Check number of parameters
@@ -44,8 +42,21 @@ int main(int argc, char * argv[]) {
     // Set replication servers
     for (i = 0; i < MAXSERVERS; i++) {
         if (3+2*i <= argc){
-            strcpy(replication_servers[i].ip, argv[2+2*i]);
+            he = gethostbyname( argv[2+2*i] );
+            addr_list = (struct in_addr **) he->h_addr_list;
+            strcpy(replication_servers[i].ip, inet_ntoa(*addr_list[0]));
             replication_servers[i].port = atoi(argv[3+2*i]);
+            replication_servers[i].isAvailable = 1;
+            /*
+            int j;
+            for(j = 0; addr_list[j] != NULL; j++) {
+                printf("IP para %d: %s", i , inet_ntoa(*addr_list[j]) );
+                strcpy(replication_servers[i].ip, inet_ntoa(*addr_list[j]));
+            }*/
+        } else {
+            strcpy(replication_servers[i].ip, "empty");
+            replication_servers[i].port = 0;
+            replication_servers[i].isAvailable = 0;
         }
     }
 
@@ -158,8 +169,8 @@ void *server_response_handler() {
 
 // Handle connection from client to server
 void *client_server_handler() {
-    int addrlen_cls, read_size, valread;
-    char client_ip[20], buffer[MSGSIZE];
+    int addrlen_cls, read_size, valread, i;
+    char client_ip[20], buffer[MSGSIZE], serverinfo[150], port[4];
     struct sockaddr_in addr;
     int server_fd_cls, new_socket_cls;
     struct sockaddr_in address_cls;
@@ -241,6 +252,23 @@ void *client_server_handler() {
     if (primary_ssl == NULL) {
         return NULL;
     }
+
+    // Check if it's server first connection
+    SSL_read(primary_ssl, buffer, MSGSIZE);
+    // If it is, send the list of servers
+    if (strncmp(buffer, CONNECTION_FIRST, CONNECTION_MSG_SIZE) == 0){
+        buffer[0] = '\0';
+        serverinfo[0] = '\0';
+
+        for(i = 0; i < MAXSERVERS; i++){
+            if(replication_servers[i].isAvailable){
+                sprintf(serverinfo, "%s|%d|", replication_servers[i].ip, replication_servers[i].port);
+                strcat(buffer, serverinfo);
+            }
+        }
+        SSL_write(primary_ssl, buffer, MSGSIZE);
+    }
+
 
     // Send username to server
     SSL_write(primary_ssl, username, sizeof(username));
