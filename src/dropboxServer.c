@@ -116,12 +116,10 @@ int main(int argc, char * argv[]) {
     addrlen = sizeof(struct sockaddr_in);
     pthread_t thread_id;
     while ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen))) {
-        debug_printf("aaa\n");
         // Attach SSL
         ssl = SSL_new(ctx);
         SSL_set_fd(ssl, new_socket);
 
-        debug_printf("bbb\n");
         /* do SSL-protocol accept */
         if ( SSL_accept(ssl) == -1 ){
             ERR_print_errors_fp(stderr);
@@ -130,12 +128,10 @@ int main(int argc, char * argv[]) {
 
         puts("Connection accepted");
 
-        debug_printf("SSL antes da thread: %d\n", ssl);
-
         if (pthread_create(&thread_id, NULL, connection_handler, ssl) < 0) {
             perror("could not create thread");
             return 1;
-        } // TODO Passar socket com SSL como parametro?
+        }
         // Now join the thread, so that we dont terminate before the thread
         // pthread_join(thread_id, NULL);
         puts("Handler assigned");
@@ -316,7 +312,6 @@ void send_file(char * file) {
             sprintf(buffer, "%d", st.st_size); // TODO integer? long?
             SSL_write(ssl, buffer, MSGSIZE);
 
-            // FIXME TODO Ajeitar aqui!!!! nao ta enviando tamanho fixo. tem problema? se sei quanto vai chgar..
             // Read data from file and send it
             while (1) {
                 // First read file in chunks
@@ -488,6 +483,7 @@ void *connection_handler(void *socket_desc) {
         sprintf(buffer, "%s", CONNECTION_FIRST);
         SSL_write(ssl, buffer, MSGSIZE);
         isFirstConnection = 1;
+        isPrimary = 1; // TODO ajustar aqui! nao necessariamente vai ser o primario...
 
         // Read list of servers
         SSL_read(ssl, buffer, MSGSIZE);
