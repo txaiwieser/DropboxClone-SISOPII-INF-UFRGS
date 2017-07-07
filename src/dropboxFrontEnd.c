@@ -176,26 +176,12 @@ void *client_server_handler() {
     struct sockaddr_in address_cls;
     uint16_t primary_sync_port;
 
-    debug_printf("client_server_handler 1\n");
-
-    // Get socket addr and client IP
-    // TODO isso nao ta fazendo nada?
-    socklen_t addr_size = sizeof(struct sockaddr_in);
-    getpeername(sock, (struct sockaddr *)&addr, &addr_size);
-    strcpy(client_ip, inet_ntoa(addr.sin_addr));
-
-    debug_printf("client_server_handler 2\n");
-
     // Receive username
     read_size = SSL_read(ssl, username, sizeof(username));
     username[read_size] = '\0';
 
-    debug_printf("client_server_handler 3\n");
-
     // Send "OK" to confirm connection was accepted.
     SSL_write(ssl, TRANSMISSION_CONFIRM, MSGSIZE);
-
-    debug_printf("client_server_handler 4\n");
 
     // Create socket for client's 'server'
     // Creating socket file descriptor
@@ -235,8 +221,6 @@ void *client_server_handler() {
         perror("accept failed");
         return 1;
     }
-    // TODO tratar retorno do accept?
-    debug_printf("ACEITOU CONEXAO\n");
 
     // Attach SSL
     ssl_cls = SSL_new(ctx);
