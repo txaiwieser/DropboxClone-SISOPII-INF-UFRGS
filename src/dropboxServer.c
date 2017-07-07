@@ -491,13 +491,20 @@ void *connection_handler(void *socket_desc) {
 
         // Read list of servers
         SSL_read(ssl, buffer, MSGSIZE);
+        // Get first server
         token = strtok(buffer, "|");
 
+        i = 0;
         while (token != NULL) {
-            debug_printf("token=> %s\n", token);
+            strcpy(replication_servers[i].ip, token);
+            replication_servers[i].isAvailable = 1;
+            // Get port
             token = strtok(NULL, "|");
+            replication_servers[i].port = atoi(token);
+            // Get next server
+            token = strtok(NULL, "|");
+            i++;
         }
-
     } else{
         sprintf(buffer, CONNECTION_NOT_FIRST);
         SSL_write(ssl, buffer, MSGSIZE);
