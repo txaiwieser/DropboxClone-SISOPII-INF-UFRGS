@@ -564,7 +564,7 @@ void connect_to_replication_servers(){
 
                 for(j = 0; j < MAXSERVERS; j++){
                     if(replication_servers[i].isAvailable && i!=j ){
-                        sprintf(serverinfo, "%s|%d|", replication_servers[i].ip, replication_servers[i].port);
+                    sprintf(serverinfo, "%s|%d|%d|", replication_servers[i].ip, replication_servers[i].port, replication_servers[i].isAvailable);
                         strcat(buffer, serverinfo);
                     }
                 }
@@ -615,10 +615,12 @@ void *connection_handler(void *socket_desc) {
         i = 0;
         while (token != NULL) {
             strcpy(replication_servers[i].ip, token);
-            replication_servers[i].isAvailable = 1;
             // Get port
             token = strtok(NULL, "|");
             replication_servers[i].port = atoi(token);
+            // Get available
+            token = strtok(NULL, "|");
+            replication_servers[i].isAvailable = atoi(token);
             // Get next server
             token = strtok(NULL, "|");
             i++;
