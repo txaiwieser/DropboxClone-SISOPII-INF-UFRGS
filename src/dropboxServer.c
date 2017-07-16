@@ -292,59 +292,61 @@ void receive_file(char *file) {
                     }
                 }
                 // TODO fazer a replicacao usando threads!! essa funcao aqui ta super duplicada
+                int foundFirst = 0; // First server available is the primary one
                 for(i = 0; i < MAXSERVERS; i++ ) {
-                    if(replication_servers[i].isAvailable) {
-                        printf("[UPLOAD %s to server %s:%d ]\n", file, replication_servers[i].ip, replication_servers[i].port);
-                        sprintf(method, "UPLOAD %s", file);
-                        SSL_write(replication_servers[i].socket, method, sizeof(method));
+                    if (replication_servers[i].isAvailable == 0) { continue; } // Skip if not available
+                    if (foundFirst == 0) { foundFirst = 1; continue; } // Skip if is the primary one
 
-                        // Send file logical modification time
-                        sprintf(buffer, "%d", client_file_time); // TODO integer? long?
+                    printf("[UPLOAD %s to server %s:%d ]\n", file, replication_servers[i].ip, replication_servers[i].port);
+                    sprintf(method, "UPLOAD %s", file);
+                    SSL_write(replication_servers[i].socket, method, sizeof(method));
+
+                    // Send file logical modification time
+                    sprintf(buffer, "%d", client_file_time); // TODO integer? long?
+                    SSL_write(replication_servers[i].socket, buffer, MSGSIZE);
+
+                    // Detect if file was created and local version is newer than server version, so file must be transfered
+                    valread = SSL_read(replication_servers[i].socket, buffer, MSGSIZE);
+                    debug_printf("filepath:%s file:%s\n", file_path, file);
+                    fp2 = fopen(file_path, "rb");
+                    if (NULL == fp2) {
+                        printf("Error opening file");
+                        SSL_write(replication_servers[i].socket, TRANSMISSION_CANCEL, MSGSIZE);
+                        //pthread_mutex_unlock(&pClientEntry->mutex);
+                    }
+                    debug_printf("leuuuuu\n");
+                    if (strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) == 0) {
+                        debug_printf("ooooo\n");
+                        // Send file size to replication server
+                        sprintf(buffer, "%d", file_size); // TODO integer? long?
+                        debug_printf("filesize: %s", buffer);
                         SSL_write(replication_servers[i].socket, buffer, MSGSIZE);
+                        debug_printf("Enviou filesize para replicas");
 
-                        // Detect if file was created and local version is newer than server version, so file must be transfered
-                        valread = SSL_read(replication_servers[i].socket, buffer, MSGSIZE);
-                        debug_printf("filepath:%s file:%s\n", file_path, file);
-                        fp2 = fopen(file_path, "rb");
-                        if (NULL == fp2) {
-                            printf("Error opening file");
-                            SSL_write(replication_servers[i].socket, TRANSMISSION_CANCEL, MSGSIZE);
-                            //pthread_mutex_unlock(&pClientEntry->mutex);
-                        }
-                        debug_printf("leuuuuu\n");
-                        if (strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) == 0) {
-                            debug_printf("ooooo\n");
-                            // Send file size to replication server
-                            sprintf(buffer, "%d", file_size); // TODO integer? long?
-                            debug_printf("filesize: %s", buffer);
-                            SSL_write(replication_servers[i].socket, buffer, MSGSIZE);
-                            debug_printf("Enviou filesize para replicas");
+                        // Read data from file and send it
+                        while (1) {
+                            // First read file in chunks of 1024 bytes
+                            unsigned char buff[MSGSIZE] = {0};
+                            int nread = fread(buff, 1, sizeof(buff), fp2);
+                            buff[nread] = '\0';
 
-                            // Read data from file and send it
-                            while (1) {
-                                // First read file in chunks of 1024 bytes
-                                unsigned char buff[MSGSIZE] = {0};
-                                int nread = fread(buff, 1, sizeof(buff), fp2);
-                                buff[nread] = '\0';
-
-                                // If read was success, send data.
-                                if (nread > 0) {
-                                    SSL_write(replication_servers[i].socket, buff, MSGSIZE);
+                            // If read was success, send data.
+                            if (nread > 0) {
+                                SSL_write(replication_servers[i].socket, buff, MSGSIZE);
+                            }
+                            debug_printf("nread = %d\n", nread);
+                            // Either there was error, or reached end of file
+                            if (nread < sizeof(buff)) {
+                                //if (feof(fp))
+                                //    debug_printf("End of file\n");
+                                if (ferror(fp2)) {
+                                    printf("Error reading\n");
                                 }
-                                debug_printf("nread = %d\n", nread);
-                                // Either there was error, or reached end of file
-                                if (nread < sizeof(buff)) {
-                                    //if (feof(fp))
-                                    //    debug_printf("End of file\n");
-                                    if (ferror(fp2)) {
-                                        printf("Error reading\n");
-                                    }
-                                    break;
-                                }
+                                break;
                             }
                         }
-                        fclose(fp2);
                     }
+                    fclose(fp2);
                 }
             }
         }
@@ -451,12 +453,14 @@ void delete_file(char *file) {
                 }
             }
             // TODO fazer a replicacao usando threads!!
+            int foundFirst = 0; // First server available is the primary one
             for(i = 0; i < MAXSERVERS; i++ ) {
-                if(replication_servers[i].isAvailable) {
-                    printf("[DELETE %s to server %s:%d ]\n", file, replication_servers[i].ip, replication_servers[i].port);
-                    sprintf(method, "DELETE %s", file);
-                    SSL_write(replication_servers[i].socket, method, sizeof(method));
-                }
+                if (replication_servers[i].isAvailable == 0) { continue; } // Skip if not available
+                if (foundFirst == 0) { foundFirst = 1; continue; } // Skip if is the primary one
+
+                printf("[DELETE %s to server %s:%d ]\n", file, replication_servers[i].ip, replication_servers[i].port);
+                sprintf(method, "DELETE %s", file);
+                SSL_write(replication_servers[i].socket, method, sizeof(method));
             }
         }
     } else {
@@ -543,37 +547,36 @@ void connect_to_replication_servers(){
     int i, j;
     char buffer[MSGSIZE] = {0}, serverinfo[120];
 
+    int foundFirst = 0; // First server available is the primary one
     for(i = 0; i < MAXSERVERS; i++){
-        debug_printf("ofksaofks i=%d\n", i);
-        if(replication_servers[i].isAvailable){
-            replication_servers[i].socket = connect_server(replication_servers[i].ip, replication_servers[i].port);
-            // TODO criar threads para evitar que caso nao consiga conectar em um servidor, possa conectar nos outros
-            debug_printf("conectou no servidor i=%d socket=%d\n", i, replication_servers[i].socket);
-            // Tell server this connection is from a primary server
-            sprintf(buffer, "%s", CONNECTION_SERVER);
-            SSL_write(replication_servers[i].socket, buffer, MSGSIZE);
-            debug_printf("fasofksaofm\n");
-            // Check if it's server first connection
-            SSL_read(replication_servers[i].socket, buffer, MSGSIZE);
-            // If it is, send the list of servers
-            if (strncmp(buffer, CONNECTION_FIRST, CONNECTION_MSG_SIZE) == 0){
-                buffer[0] = '\0';
-                serverinfo[0] = '\0';
+        if (replication_servers[i].isAvailable == 0) { continue; } // Skip if not available
+        if (foundFirst == 0) { foundFirst = 1; continue; } // Skip if is the primary one
 
-                debug_printf("msg de first no %d\n", i);
+        replication_servers[i].socket = connect_server(replication_servers[i].ip, replication_servers[i].port);
+        // TODO criar threads para evitar que caso nao consiga conectar em um servidor, possa conectar nos outros
+        debug_printf("conectou no servidor i=%d socket=%d\n", i, replication_servers[i].socket);
+        // Tell server this connection is from a primary server
+        sprintf(buffer, "%s", CONNECTION_SERVER);
+        SSL_write(replication_servers[i].socket, buffer, MSGSIZE);
+        debug_printf("fasofksaofm\n");
+        // Check if it's server first connection
+        SSL_read(replication_servers[i].socket, buffer, MSGSIZE);
+        // If it is, send the list of servers
+        if (strncmp(buffer, CONNECTION_FIRST, CONNECTION_MSG_SIZE) == 0){
+            buffer[0] = '\0';
+            serverinfo[0] = '\0';
 
-                for(j = 0; j < MAXSERVERS; j++){
-                    if(replication_servers[i].isAvailable && i!=j ){
-                    sprintf(serverinfo, "%s|%d|%d|", replication_servers[i].ip, replication_servers[i].port, replication_servers[i].isAvailable);
-                        strcat(buffer, serverinfo);
-                    }
-                }
-                SSL_write(replication_servers[i].socket, buffer, MSGSIZE);
+            debug_printf("msg de first no %d\n", i);
+
+            for(j = 0; j < MAXSERVERS; j++){
+                sprintf(serverinfo, "%s|%d|%d|", replication_servers[i].ip, replication_servers[i].port, replication_servers[i].isAvailable);
+                strcat(buffer, serverinfo);
             }
-
-            // Send username to server
-            SSL_write(replication_servers[i].socket, username, sizeof(username));
+            SSL_write(replication_servers[i].socket, buffer, MSGSIZE);
         }
+
+        // Send username to server
+        SSL_write(replication_servers[i].socket, username, sizeof(username));
     }
 }
 

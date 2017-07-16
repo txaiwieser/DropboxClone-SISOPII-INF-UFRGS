@@ -251,10 +251,8 @@ void *client_server_handler() {
         serverinfo[0] = '\0';
 
         for(i = 0; i < MAXSERVERS; i++){
-            if(replication_servers[i].isAvailable && (replication_servers[i].ip != primary_host || (replication_servers[i].ip == primary_host && replication_servers[i].port != primary_port)){
-                sprintf(serverinfo, "%s|%d|%d|", replication_servers[i].ip, replication_servers[i].port, replication_servers[i].isAvailable);
-                strcat(buffer, serverinfo);
-            }
+            sprintf(serverinfo, "%s|%d|%d|", replication_servers[i].ip, replication_servers[i].port, replication_servers[i].isAvailable);
+            strcat(buffer, serverinfo);
         }
         SSL_write(primary_ssl, buffer, MSGSIZE);
     }
