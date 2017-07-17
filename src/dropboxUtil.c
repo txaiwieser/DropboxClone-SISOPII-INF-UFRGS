@@ -8,6 +8,8 @@
 #include <netdb.h>
 #include <string.h>
 #include <pthread.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 #include "../include/dropboxUtil.h"
 
 pthread_mutex_t fileMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -44,4 +46,63 @@ int file_exists(const char* path) {
     int stat_result = (stat(path, &st) == 0) && S_ISREG(st.st_mode);
     pthread_mutex_unlock(&fileMutex);
     return stat_result;
+}
+
+SSL* start_server(char * host, int port) {
+
+
+}
+
+SSL* connect_server(char * host, int port) {
+    int sock = 0;
+    struct sockaddr_in serv_addr;
+    struct hostent *server;
+    SSL_CTX *ctx;
+    const SSL_METHOD *method;
+    SSL *ssl;
+
+    SSL_library_init();
+    OpenSSL_add_all_algorithms();
+    SSL_load_error_strings();
+    method = TLSv1_2_client_method();
+    ctx = SSL_CTX_new(method);
+    if (ctx == NULL){
+      ERR_print_errors_fp(stderr);
+      abort();
+    }
+
+    server = gethostbyname(host);
+    if (server == NULL) {
+        printf("ERROR, no such host\n");
+        return NULL;
+    }
+
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printf("\n Socket creation error \n");
+        return NULL;
+    }
+
+    memset(&serv_addr, '0', sizeof(serv_addr));
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
+    serv_addr.sin_addr = *((struct in_addr *) server->h_addr);
+    bzero(&(serv_addr.sin_zero), 8);
+
+    if (connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
+        printf("\nConnection Failed. \n");
+        return NULL;
+    }
+
+    ssl = SSL_new(ctx);
+    SSL_set_fd(ssl, sock);
+    if (SSL_connect(ssl) == -1){
+        printf("SSL connection refused\n");
+        ERR_print_errors_fp(stderr);
+        return(NULL);
+    }
+
+    SSL_CTX_free(ctx); // release context
+
+    return ssl;
 }

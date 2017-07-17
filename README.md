@@ -1,7 +1,8 @@
 ## Utilização
 1. Compile ```make```
-2. Inicie o servidor: ```./bin/dropboxServer 3003```
-3. Inicie o cliente: ```./bin/dropboxClient usuario 127.0.0.1 3003```
+2. Inicie o servidor: ```./bin/dropboxServer 3000```
+3. Inicie o frontend: ```./bin/dropboxFrontEnd 4000 localhost 3000```
+4. Inicie o cliente: ```./bin/dropboxClient usuario localhost 4000```
 
 ## Etapa 2
 - [x] Sincronização de relógio
@@ -12,6 +13,7 @@
 - [ ] Testar muito bem sincronização de relógio!
 - [ ] TODOs no código
 - [ ] Talvez em alguns lugares da cliente em vez de ver se arquivo existe usando stat poderia ver se existe na estrutura.
+- [ ] Ver se os tipos sao adequados em todos os atoi(), write, read..
 
 ## Anotações para relatório etapa 2
 - usamos TLS1.2

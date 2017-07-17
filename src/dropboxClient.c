@@ -29,8 +29,6 @@ uint16_t sync_files_left = MAXFILES, original_sync_files_left = MAXFILES;  // nu
 char *pIgnoredFileEntry; // Pointer to list of ignored files. It's used by inotify to prevent uploading a file that has just best downloaded.
 int inotify_run = 0;
 SSL *ssl, *ssl_cls; // TODO conferir se ta certo
-SSL_CTX *ctx;
-const SSL_METHOD *method;
 
 pthread_barrier_t syncbarrier;
 pthread_barrier_t serverlistenerbarrier;
@@ -40,28 +38,16 @@ pthread_mutex_t inotifyMutex = PTHREAD_MUTEX_INITIALIZER;
 
 TAILQ_HEAD(, tailq_entry) ignoredfiles_tailq_head;
 
-
-int getTimeServer(void){
-    int valread;
-    uint32_t server_time;
-
-    // Call server asking it's time
-    SSL_write(ssl, "TIME", METHODSIZE);
-
-    // Receive time
-    valread = SSL_read(ssl, &server_time, sizeof(server_time));
-    server_time = ntohl(server_time);
-
-    return server_time;
-}
-
 int getLogicalTime(void){
     time_t t0, t1, ts, tc;
+    char buffer[MSGSIZE] = {0};
 
     // Sets timestamp T0
     t0 = time(NULL);
     // Gets server logical time
-    ts = getTimeServer();
+    SSL_write(ssl, "TIME", MSGSIZE);
+    SSL_read(ssl, buffer, MSGSIZE);
+    ts = atol(buffer); // TODO atoi?
     // Sets timestamp T1
     t1 = time(NULL);
     // Calculate client time
@@ -70,55 +56,15 @@ int getLogicalTime(void){
     return tc;
 }
 
-int connect_server(char * host, int port) {
-    int sock = 0;
-    struct sockaddr_in serv_addr;
-    struct hostent *server;
-
-    server = gethostbyname(host);
-    if (server == NULL) {
-        printf("ERROR, no such host\n");
-        return -1;
-    }
-
-    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        printf("\n Socket creation error \n");
-        return -1;
-    }
-
-    memset(&serv_addr, '0', sizeof(serv_addr));
-
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(port);
-    serv_addr.sin_addr = *((struct in_addr *) server->h_addr);
-    bzero(&(serv_addr.sin_zero), 8);
-
-    if (connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
-        printf("\nConnection Failed. \n");
-        return -1;
-    }
-
-    return sock;
-}
-
 void send_file(char *file) {
     struct stat st;
-    char buffer[1024] = {0}, method[METHODSIZE];
-    int valread, file_i, found_file = 0;
-    uint32_t length_converted, time_converted;
+    char buffer[MSGSIZE] = {0}, method[MSGSIZE];
+    int valread, file_i, file_found = -1, first_free_index = -1;
+    time_t file_mtime;
 
     pthread_mutex_lock(&fileOperationMutex);
 
-    // Search for file in user's list of files
-    for(file_i = 0; file_i < MAXFILES; file_i++) {
-        if(strcmp(client_files[file_i].name, file) == 0) {
-            found_file = 1;
-            break;
-        }
-    }
-
-    if (found_file){
-        stat(file, &st);
+    if (stat(file, &st) == 0 && S_ISREG(st.st_mode)) { // If file exists
         FILE *fp = fopen(file,"rb");
         if (fp == NULL) {
             printf("Couldn't open the file\n");
@@ -130,26 +76,57 @@ void send_file(char *file) {
             SSL_write(ssl, method, sizeof(method));
             debug_printf("[%s method sent]\n", method);
 
-            client_files[file_i].last_modified = getLogicalTime(); // REVIEW manter aqui ou colocar antes do for?
-            time_converted = htonl(client_files[file_i].last_modified);
-            SSL_write(ssl, &time_converted, sizeof(time_converted));
+            sprintf(buffer, "%d", getLogicalTime()); // TODO integer? long?
+            debug_printf("buffer = %d\n", buffer);
+            SSL_write(ssl, buffer, MSGSIZE);
+            file_mtime = atoi(buffer);
+
+            debug_printf("vou ler\n");
+
+            // Search for file in user's list of files
+            for(file_i = 0; file_i < MAXFILES; file_i++) {
+                if(strcmp(client_files[file_i].name, basename(file)) == 0) {
+                    file_found = file_i;
+                    break;
+                }
+            }
+
+            // Find the next free slot in user's list of files
+            for(file_i = 0; file_i < MAXFILES; file_i++) {
+                if(client_files[file_i].size == FREE_FILE_SIZE && first_free_index == -1)
+                    first_free_index = file_i;
+            }
+
+            // If file already exists on client file list, update it. Otherwise, insert it.
+            if(file_found >= 0) {
+                client_files[file_found].size = st.st_size;
+                client_files[file_found].last_modified = file_mtime;
+            } else {
+                debug_printf("basename(file): %s", basename(file));
+                strcpy(client_files[first_free_index].name, basename(file));
+                client_files[first_free_index].size = st.st_size;
+                client_files[first_free_index].last_modified = file_mtime;
+            }
 
             // Detect if file was created and local version is newer than server version, so file must be transfered
-            valread = SSL_read(ssl, buffer, TRANSMISSION_MSG_SIZE);
+            valread = SSL_read(ssl, buffer, MSGSIZE);
+            debug_printf("leuuuuu\n");
             if (strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) == 0) {
+                debug_printf("ooooo\n");
                 // Send file size to server
-                length_converted = htonl(st.st_size);
-                SSL_write(ssl, &length_converted, sizeof(length_converted));
+                sprintf(buffer, "%d", st.st_size); // TODO integer? long?
+                SSL_write(ssl, buffer, MSGSIZE);
 
                 // Read data from file and send it
                 while (1) {
                     // First read file in chunks of 1024 bytes
-                    unsigned char buff[1024] = {0};
+                    unsigned char buff[MSGSIZE] = {0};
                     int nread = fread(buff, 1, sizeof(buff), fp);
+                    buff[nread] = '\0';
 
                     // If read was success, send data.
                     if (nread > 0) {
-                        SSL_write(ssl, buff, nread);
+                        SSL_write(ssl, buff, MSGSIZE);
                     }
 
                     // Either there was error, or reached end of file
@@ -176,7 +153,7 @@ void get_file(char *file, char *path) {
     int valread, file_i, file_found = -1, first_free_index = -1, file_size;
     uint32_t nLeft;
     time_t original_file_time;
-    char buffer[1024] = {0}, method[METHODSIZE], file_path[256];
+    char buffer[MSGSIZE] = {0}, method[MSGSIZE], file_path[256];
     struct utimbuf new_times;
     struct tailq_entry *ignoredfile_node;
 
@@ -196,7 +173,7 @@ void get_file(char *file, char *path) {
         debug_printf("[%s method sent]\n", method);
 
         // Detect if server accepted transmission
-        valread = SSL_read(ssl, buffer, TRANSMISSION_MSG_SIZE);
+        valread = SSL_read(ssl, buffer, MSGSIZE);
         if (strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) == 0) {
           // Create file where data will be stored
           FILE *fp;
@@ -205,21 +182,22 @@ void get_file(char *file, char *path) {
               printf("Error opening file");
           } else {
               // Receive file size
-              valread = SSL_read(ssl, &nLeft, sizeof(nLeft));
-              nLeft = ntohl(nLeft);
+              SSL_read(ssl, buffer, MSGSIZE);
+              nLeft = atoi(buffer); // TODO nao usar atoi?
               file_size = nLeft;
+
               // Receive data in chunks
-              while (nLeft > 0 && (valread = SSL_read(ssl, buffer, (MIN(sizeof(buffer), nLeft)))) > 0) {
-                  fwrite(buffer, 1, valread, fp);
-                  nLeft -= valread;
+              while (nLeft > 0 && (valread = SSL_read(ssl, buffer, sizeof(buffer))) > 0) {
+                  fwrite(buffer, 1, MIN(nLeft,valread), fp);
+                  nLeft -= MIN(nLeft,valread);
               }
               if (valread < 0) {
                   printf("\n Read Error \n");
               }
           }
 
-          valread = SSL_read(ssl, &original_file_time, sizeof(time_t));
-          original_file_time = ntohl(original_file_time);
+          SSL_read(ssl, buffer, MSGSIZE);
+          original_file_time = atol(buffer); // TODO nao usar atoi? atol? outras funcoes mais seguras?
 
           // Search for file in user's list of files
           for(file_i = 0; file_i < MAXFILES; file_i++) {
@@ -274,7 +252,7 @@ void get_file(char *file, char *path) {
 };
 
 void delete_server_file(char *file) {
-    char method[METHODSIZE];
+    char method[MSGSIZE];
 
     // Concatenate strings to get method = "DELETE filename"
     sprintf(method, "DELETE %s", file);
@@ -296,6 +274,7 @@ void delete_local_file(char *file) {
     // Search for file in user's list of files
     for(file_i = 0; file_i < MAXFILES; file_i++) {
         // Stop if it is found
+        debug_printf("client_files[file_i].name: %s\n", client_files[file_i].name);
         if(strcmp(client_files[file_i].name, file) == 0) {
             found_file = 1;
             break;
@@ -331,66 +310,22 @@ void delete_local_file(char *file) {
     pthread_mutex_unlock(&fileOperationMutex);
 };
 
-// Save list of files into user_sync_dir_path/.dropboxfiles
-void save_list_of_files() {
-    // TODO Autosave every x seconds? or maybe everytime there's a file change?
-    struct dirent **namelist;
-    int n, i;
-    FILE *fp;
-    struct stat st;
-    char filepath[MAXNAME], stfpath[MAXNAME];
-    sprintf(filepath, "%s/.dropboxfiles", user_sync_dir_path);
-
-    pthread_mutex_lock(&fileOperationMutex);
-
-    fp = fopen(filepath, "w");
-    if (NULL == fp) {
-        printf("Error opening file");
-    } else {
-        n = scandir(user_sync_dir_path, &namelist, 0, alphasort);
-
-        if (n > 2) { // Starting in i=2, it ignores '.' and '..'
-            for (i = 2; i < n; i++) {
-                sprintf(stfpath, "%s/%s", user_sync_dir_path, namelist[i]->d_name);
-                stat(stfpath, &st);
-                if(namelist[i]->d_name[0] != '.' && !(st.st_mode & S_IFDIR)) { // If it's a file and it's not hidden
-                    // Save filename
-                    fwrite(namelist[i]->d_name, strlen(namelist[i]->d_name), 1, fp);
-                    fwrite("\n", 1, 1, fp);
-                    // and timestamp
-                    struct tm *ptm = gmtime(&st.st_mtime);
-                    char buf[256];
-                    strftime(buf, sizeof buf, "%F %T", ptm);
-                    fwrite(buf, strlen(buf), 1, fp);
-                    fwrite("\n", 1, 1, fp);
-
-                    free(namelist[i]);
-                }
-            }
-        }
-    }
-    debug_printf("[Closing .dropboxfiles]\n");
-    fclose (fp);
-
-    pthread_mutex_unlock(&fileOperationMutex);
-}
-
 void cmdList() {
     int valread;
     uint32_t nLeft;
-    char buffer[1024] = {0};
+    char buffer[MSGSIZE] = {0};
 
-    SSL_write(ssl, "LIST", METHODSIZE);
+    SSL_write(ssl, "LIST", MSGSIZE);
 
     // Receive length
-    SSL_read(ssl, &nLeft, sizeof(nLeft));
-    nLeft = ntohl(nLeft);
+    SSL_read(ssl, buffer, MSGSIZE);
+    nLeft = atoi(buffer); // TODO nao usar atoi?
 
     // Receive list of files in chunks
     while (nLeft > 0 && (valread = SSL_read(ssl, buffer, sizeof(buffer))) > 0) {
         buffer[valread] = '\0';
         printf("%s", buffer);
-        nLeft -= valread;
+        nLeft -= strlen(buffer);
     }
 };
 
@@ -406,72 +341,21 @@ void cmdMan() {
 };
 
 void cmdExit() {
-    save_list_of_files();
     close_connection();
 }
 
 void sync_client() {
+    char buffer[MSGSIZE];
+
     pthread_mutex_lock(&fileOperationMutex);
     debug_printf("[Syncing...]\n");
 
-    SSL_write(ssl, "SYNC", METHODSIZE);
+    SSL_write(ssl, "SYNC", MSGSIZE);
 
     // Receive number of files
-    SSL_read(ssl, &sync_files_left, sizeof(sync_files_left));
-    sync_files_left = ntohs(sync_files_left);
+    SSL_read(ssl, buffer, MSGSIZE);
+    sync_files_left = atoi(buffer); // TODO nao usar atoi? atol? outras funcoes mais seguras?
     original_sync_files_left = sync_files_left;
-
-    /* TODO Sync modifications since last logout
-
-    FILE *fp;
-    struct stat st;
-    char filepath[MAXNAME], filename[MAXNAME], buf[256];
-    sprintf(filepath, "%s/.dropboxfiles", user_sync_dir_path);
-
-    // Open .dropboxfiles if it exists
-    if (stat(filepath, &st) == 0) {
-        fp = fopen(filepath, "r");
-        if (NULL == fp) {
-            printf("Error opening file");
-        } else {
-            // Read filenames with timestamps
-            while(fgets(filename, sizeof(filename), fp)) {
-                // Remove \n at end of string
-                size_t ln = strlen(filename)-1;
-                if (filename[ln] == '\n')
-                    filename[ln] = '\0';
-
-                fgets(buf, sizeof(buf), fp);
-                // Converting from string to time_t
-                struct tm tm;
-                strptime(buf, "%F %T", &tm);
-                //time_t t = mktime(&tm);
-
-                debug_printf("File %s modified %s", filename, buf);
-            }
-            // Compare with server and then sync.
-        }
-        fclose(fp);
-
-        If a file listed on .dropboxfiles doesn't exist anymore,
-        user deleted it. So, delete it on server and other devices too.
-        delete_server_file("filename");
-
-        If a file listed on .dropboxfiles exists locally, but not on server,
-        it means it was deleted by another device. So, delete it locally (without propagating to server).
-        delete_local_file("filename");
-
-        If there's a file that isn't listed on .dropboxfiles, it was created after
-        last sync. So, upload it to the server.
-        send_file("filename");
-
-        If a file is listed on .dropboxfiles, exists locally and on server,
-        need to check what's the newer version, and update it on client or server.
-        if (localversion newer) send_file("filename");
-        else if (remoteversion newer) get_file("filename");
-
-        Any other case...?
-    }*/
 
     debug_printf("[Syncing done]\n");
     pthread_mutex_unlock(&fileOperationMutex);
@@ -595,50 +479,46 @@ void cmdGetSyncDir() {
 
 // Listen to server calls (PUSH, DELETE, ...)
 void* server_listener(void* unused) {
-    int sock_cls, read_size;
+    int read_size;
     uint16_t client_server_port;
-    char server_message[METHODSIZE];
+    char buffer[MSGSIZE];
 
     // Receive server port for new socket
-    read_size = SSL_read(ssl, &client_server_port, sizeof(client_server_port));
-    client_server_port = ntohs(client_server_port);
+    SSL_read(ssl, buffer, MSGSIZE);
+    client_server_port = atoi(buffer); // TODO nao usar atoi? atol? outras funcoes mais seguras?
+    debug_printf("client_server_port: %d\n", client_server_port);
 
     // Connect and attach SSL
-    sock_cls = connect_server(server_host, client_server_port);
-    ssl_cls = SSL_new(ctx);
-    SSL_set_fd(ssl_cls, sock_cls);
-    if (SSL_connect(ssl_cls) == -1){
-        printf("SSL connection refused\n");
-        ERR_print_errors_fp(stderr);
-        exit(-1);
+    ssl_cls = connect_server(server_host, client_server_port);
+    if (ssl_cls == NULL) {
+        return NULL;
     }
 
     pthread_barrier_wait(&serverlistenerbarrier);
 
     // Receive a message from server
-    while ((read_size = SSL_read(ssl_cls, server_message, METHODSIZE)) > 0 ) {
+    while ((read_size = SSL_read(ssl_cls, buffer, MSGSIZE)) > 0 ) {
         // end of string marker
-        server_message[read_size] = '\0';
+        buffer[read_size] = '\0';
 
-        if (!strncmp(server_message, "PUSH", 4)) {
+        if (!strncmp(buffer, "PUSH", 4)) {
             debug_printf("[received PUSH from server]\n");
-            get_file(server_message + 5, user_sync_dir_path);
+            get_file(buffer + 5, user_sync_dir_path);
             if (sync_files_left > 1){
                 sync_files_left--;
             } else if(sync_files_left == 1  && original_sync_files_left >= 1){
                 pthread_barrier_wait(&syncbarrier);
                 sync_files_left--;
             }
-        } else if (!strncmp(server_message, "DELETE", 6)) {
+        } else if (!strncmp(buffer, "DELETE", 6)) {
             debug_printf("[received DELETE from server]\n");
-            delete_local_file(server_message + 7);
+            delete_local_file(buffer + 7);
         }
     }
 
     if (read_size == 0) {
         printf("Server disconnected. Closing connection...");
         close_connection();
-        save_list_of_files();
         exit(0);
     } else if (read_size == -1) {
         perror("recv failed");
@@ -698,7 +578,7 @@ void ShowCerts(SSL* ssl)
 int main(int argc, char * argv[]) {
     char cmd[256];
     char filename[256];
-    char buffer[1024];
+    char buffer[MSGSIZE];
     char * token;
     int valread, i;
     pthread_t thread_id;
@@ -710,30 +590,17 @@ int main(int argc, char * argv[]) {
     }
 
     // Initialize SSL
+    SSL_library_init();
     OpenSSL_add_all_algorithms();
     SSL_load_error_strings();
-    method = TLSv1_2_client_method();
-    ctx = SSL_CTX_new(method);
-    if (ctx == NULL){
-      ERR_print_errors_fp(stderr);
-      abort();
-    }
 
     // Connect to server
     debug_printf("[Client started with parameters User=%s IP=%s Port=%s]\n", argv[1], argv[2], argv[3]);
     strcpy(server_host, argv[2]);
     strcpy(server_user, argv[1]);
     server_port = atoi(argv[3]);
-    sock = connect_server(server_host, server_port);
-    if (sock < 0) {
-        return -1;
-    }
-    // Attach SSL
-    ssl = SSL_new(ctx);
-    SSL_set_fd(ssl, sock);
-    if (SSL_connect(ssl) == -1){
-        printf("SSL connection refused\n");
-        ERR_print_errors_fp(stderr);
+    ssl = connect_server(server_host, server_port);
+    if (ssl == NULL) {
         return -1;
     }
     //ShowCerts(ssl);
@@ -753,10 +620,10 @@ int main(int argc, char * argv[]) {
     pthread_barrier_init(&serverlistenerbarrier, NULL, 2);
 
     // Send username to server
-    SSL_write(ssl, server_user, strlen(server_user));
+    SSL_write(ssl, server_user, sizeof(server_user));
     // Detect if connection was closed
-    valread = SSL_read(ssl, buffer, TRANSMISSION_MSG_SIZE);
-    if (valread == 0 || strcmp(buffer, TRANSMISSION_CONFIRM) != 0) {
+    valread = SSL_read(ssl, buffer, MSGSIZE);
+    if (valread == 0 || strncmp(buffer, TRANSMISSION_CONFIRM, TRANSMISSION_MSG_SIZE) != 0) {
         printf("%s is already connected in two devices. Closing connection...\n", server_user);
         return 0;
     }
@@ -772,10 +639,12 @@ int main(int argc, char * argv[]) {
     // Create user sync_dir and sync files
     printf("Syncing...");
     pthread_barrier_wait(&serverlistenerbarrier); // wait for server_listener connection
+
     cmdGetSyncDir();
+
     printf("Done.\n\n");
 
-    printf("Horário do Servidor: %d\n", getTimeServer());
+    printf("Horário Lógico: %d\n", getLogicalTime());
 
     printf("Welcome to Dropbox! - v 2.0\n");
     cmdMan();
@@ -810,8 +679,6 @@ int main(int argc, char * argv[]) {
             else printf("Invalid command! Type 'help' to see the available commands\n");
         }
     }
-
-    SSL_CTX_free(ctx); // release context  TODO is it called on close_connection? i guess no
 
     return 0;
 }
