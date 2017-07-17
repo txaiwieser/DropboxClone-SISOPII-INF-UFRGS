@@ -595,11 +595,12 @@ void *connection_handler(void *socket_desc) {
 
     debug_printf("SSL: %d\n", ssl);
 
+    // Read if connnection is from a frontend or a server
+    SSL_read(ssl, buffer, MSGSIZE);
+
     // Send message to front end informing if it is the first connection
     if (isFirstConnection){
 
-        // Read if connnection is from a frontend or a server
-        SSL_read(ssl, buffer, MSGSIZE);
         if (strncmp(buffer, CONNECTION_FRONTEND, CONNECTION_FIRST_MSG_SIZE) == 0) {
             isPrimary = 1;
         }
